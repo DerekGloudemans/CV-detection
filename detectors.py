@@ -33,7 +33,8 @@ def detect_video(video_file, detector, verbose = True, show = True, save = False
             
             # detect frame
             detections,im_out = detector.detect(frame, show = False, verbose = False)
-            all_detections.append(detections)
+            if True: # convert to numpy array
+                all_detections.append(detections.cpu().numpy())
             #summary statistics
             frames += 1
             print("FPS of the video is {:5.2f}".format( frames / (time.time() - start)))
@@ -62,13 +63,29 @@ def detect_video(video_file, detector, verbose = True, show = True, save = False
  
     return all_detections
 
+def condense_detections(detections):
+    """
+    input - list of Dx8 numpy arrays correspoding to detections
+    idx (always 0 in this imp.), 4 corner coordinates, objectness , score of class with max conf,class idx.
+    output - list of D x 2 numpy arrays with x,y center coordinates
+    """
+    new_list = []
+    for item in detections:
+        coords = np.zeros([len(item),2])
+        for i in range(0,len(item)):
+            coords[i,0] = (item[i,1]+item[i,3])/2.0
+            coords[i,1] = (item[i,2]+item[i,4])/2.0
+        new_list.append(coords)            
+    return new_list
+
+
 # testing code    
 if __name__ == "__main__":
     # loads model unless already loaded
     try:
        net
     except:
-        net = Darknet_Detector('pytorch_yolo_v3/cfg/yolov3.cfg','pytorch_yolo_v3/yolov3.weights','pytorch_yolo_v3/data/coco.names',0.5,0.5,80,1024)
+        net = Darknet_Detector('pytorch_yolo_v3/cfg/yolov3.cfg','pytorch_yolo_v3/yolov3.weights','pytorch_yolo_v3/data/coco.names',0.5,0.1,80,1024)
         print("Model reloaded.")
     
         # tests that net is working correctly
@@ -77,4 +94,6 @@ if __name__ == "__main__":
         torch.cuda.empty_cache()    
         
     video_file = 'capture_005.avi'
-    detections = detect_video(video_file,net,save=True)
+    video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
+    detections = detect_video(video_file,net,show = True, save=False)
+    coords = condense_detections(detections)
