@@ -106,6 +106,22 @@ def match_greedy(first,second,threshold = 10):
         
     return matchings
 
+def match_all(coords_list,match_fn = match_greedy):
+    """
+    performs matching usign the match_fn strategy for all pairs of consecutive
+    coordinate sets in coords_list
+    coords_list- list of M x (x,y) pairs
+    output - list of matchings between frames
+    """
+    
+    out_list = []
+    for i in range(0,len(coords_list)-1):
+        
+        first = coords_list[i]
+        second = coords_list[j]
+        out_list.append(match_fn(first,second))
+    return out_list
+
 # testing code    
 if __name__ == "__main__":
     # loads model unless already loaded
