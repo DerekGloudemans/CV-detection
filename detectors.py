@@ -78,6 +78,33 @@ def condense_detections(detections):
         new_list.append(coords)            
     return new_list
 
+def match_greedy(first,second,threshold = 10):
+    """
+    performs  greedy best-first matching of objects between frames
+    inputs - N x 2 arrays of object x and y coordinates from different frames
+    output - M x 1 array where index i corresponds to the second frame object 
+    matched to the first frame object i
+    """
+
+    
+    # find distances between first and second
+    dist = np.zeros([len(first),len(second)])
+    for i in range(0,len(first)):
+        for j in range(0,len(second)):
+            dist[i,j] = np.sqrt((first[i,0]-second[j,0])**2 + (first[i,1]-second[j,1])**2)
+    
+    # select closest pair
+    matchings = np.zeros(len(first))
+    unflat = lambda x: (x%len(second), x //len(second))
+    while np.min(dist) < threshold:
+        min_f, min_s = unflat(np.argmin(dist))
+        matchings[min_f] = min_s
+        dist[:,min_f] = np.inf
+        dist[:,min_s] = np.inf
+        dist[min_f,:] = np.inf
+        dist[min_s,:] = np.inf
+        
+    return matchings
 
 # testing code    
 if __name__ == "__main__":
@@ -93,7 +120,9 @@ if __name__ == "__main__":
         out = net.detect(test)
         torch.cuda.empty_cache()    
         
-    video_file = 'capture_005.avi'
-    video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
-    detections = detect_video(video_file,net,show = True, save=False)
-    coords = condense_detections(detections)
+#    video_file = 'capture_005.avi'
+#    video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
+#    detections = detect_video(video_file,net,show = True, save=False)
+#    coords = condense_detections(detections)
+        
+    
