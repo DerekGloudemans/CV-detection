@@ -94,7 +94,7 @@ def match_greedy(first,second,threshold = 10):
             dist[i,j] = np.sqrt((first[i,0]-second[j,0])**2 + (first[i,1]-second[j,1])**2)
     
     # select closest pair
-    matchings = np.zeros(len(first))
+    matchings = np.zeros(len(first))-1
     unflat = lambda x: (x%len(second), x //len(second))
     while np.min(dist) < threshold:
         min_f, min_s = unflat(np.argmin(dist))
@@ -108,37 +108,119 @@ def match_greedy(first,second,threshold = 10):
 
 def match_all(coords_list,match_fn = match_greedy):
     """
-    performs matching usign the match_fn strategy for all pairs of consecutive
+    performs matching using the match_fn strategy for all pairs of consecutive
     coordinate sets in coords_list
     coords_list- list of M x (x,y) pairs
     output - list of matchings between frames
     """
-    
     out_list = []
     for i in range(0,len(coords_list)-1):
         
         first = coords_list[i]
-        second = coords_list[j]
+        second = coords_list[i+1]
         out_list.append(match_fn(first,second))
     return out_list
 
 # testing code    
 if __name__ == "__main__":
-    # loads model unless already loaded
-    try:
-       net
-    except:
-        net = Darknet_Detector('pytorch_yolo_v3/cfg/yolov3.cfg','pytorch_yolo_v3/yolov3.weights','pytorch_yolo_v3/data/coco.names',0.5,0.1,80,1024)
-        print("Model reloaded.")
-    
-        # tests that net is working correctly
-        test ='pytorch_yolo_v3/imgs/person.jpg'
-        out = net.detect(test)
-        torch.cuda.empty_cache()    
-        
+#    # loads model unless already loaded
+#    try:
+#       net
+#    except:
+#        net = Darknet_Detector('pytorch_yolo_v3/cfg/yolov3.cfg','pytorch_yolo_v3/yolov3.weights','pytorch_yolo_v3/data/coco.names',0.5,0.1,80,1024)
+#        print("Model reloaded.")
+#    
+#        # tests that net is working correctly
+#        test ='pytorch_yolo_v3/imgs/person.jpg'
+#        out = net.detect(test)
+#        torch.cuda.empty_cache()    
+#        
 #    video_file = 'capture_005.avi'
 #    video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
 #    detections = detect_video(video_file,net,show = True, save=False)
 #    coords = condense_detections(detections)
-        
+    matchings = match_all(coords)   
     
+    
+    snap_threshold = 10
+    frames_lost_lim = 5
+    active_objs = []
+    inactive_objs = []
+    
+    # initialize with all objects found in first frame
+    for i,row in enumerate(coords[0]):
+        obj = {
+                'current': (row[0],row[1]),
+                'all': [], # keeps track of all positions of the object
+                'obj_id': i, # position in coords list
+                'fsld': 0,   # frames since last detected
+                'first_frame': 0 # frame in which object is first detected
+                }
+        obj['all'].append(obj['current']) 
+        active_objs.append(obj)
+    
+    # for one set of matchings between frames - this loop will run (# frames -1) times
+    for cur_frame, frame_set in enumerate(matchings):
+        move_to_inactive = []
+        matched_in_next = [] # keeps track of which objects from next frame are already dealt with
+        
+        # first, deal with all existing objects (each loop deals with one object)
+        for o, obj in enumerate(active_objs):
+            obj_id_next = int(frame_set[obj['obj_id']]) # get the index of object in next frame or -1 if not matched in next frame
+            
+            if obj_id_next != -1: # object has a match
+                obj['obj_id'] = obj_id_next
+                obj['current'] = (coords[i+1][obj_id_next,0],coords[i+1][obj_id_next,1])
+                obj['all'].append(obj['current'])
+                obj['fsld'] = 0
+                
+                matched_in_next.append(obj_id_next)
+                matched = True
+                
+            else: # object does not have a certain match in next frame
+                # search for match among detatched objects
+                for j, row in enumerate(coords[i+1]):
+                    if j not in matched_in_next: # not already matched to object in previous frame
+                        # calculate distance to current obj
+                        distance = np.sqrt((obj['current'][0]-row[0])**2 + (obj['current'][1]-row[1])**2)
+                        if distance < snap_threshold: # close enough to call a match
+                            obj['obj_id'] = j
+                            obj['current'] = (row[0],row[1])
+                            obj['all'].append(obj['current'])
+                            obj['fsld'] = 0
+                            
+                            matched_in_next.append(j)
+                            matched = True
+                        
+                # if no match at all
+                if not matched:
+                    obj['obj_id'] = -1
+                    obj['all'].append(obj['current']) # don't update location at all
+                    obj['fsld'] += 1
+                
+                    if obj['fsld'] > frames_lost_lim:
+                        move_to_inactive.append(o)
+                
+
+                
+        # now, deal with objects found only in second frame  - each row is one object  
+        for k, row in enumerate(coords[i+1]):
+            # if row was matched in previous frame, the object has already been dealt with
+            if k not in matched_in_next:
+                # create a new object
+                new_obj = {
+                        'current': (row[0],row[1]),
+                        'all': [], # keeps track of all positions of the object
+                        'obj_id': k, # position in coords list
+                        'fsld': 0,   # frames since last detected
+                        'first_frame': cur_frame # frame in which object is first detected
+                        }
+                obj['all'].append(obj['current']) 
+                active_objs.append(obj)
+                
+        # lastly, move all objects in move_to_inactive
+        move_to_inactive.sort()
+        move_to_inactive.reverse()
+        for idx in move_to_inactive:
+            inactive_objs.append(active_objs(idx))
+            del active_objs[idx]
