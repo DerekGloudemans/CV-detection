@@ -3,10 +3,10 @@ import time
 import torch
 import numpy as np
 import cv2 
+import matplotlib.pyplot as plt
 from pytorch_yolo_v3.detector import Darknet_Detector
 
-
-def detect_video(video_file, detector, verbose = True, show = True, save = False):
+def detect_video(video_file, detector, verbose = True, show = True, save_file = None):
     
     # open up a videocapture object
     cap = cv2.VideoCapture(video_file)
@@ -14,11 +14,11 @@ def detect_video(video_file, detector, verbose = True, show = True, save = False
     assert cap.isOpened(), "Cannot open file \"{}\"".format(video_file)
     
     # opens VideoWriter object for saving video file if necessary
-    if save:
+    if save_file != None:
         # open video_writer object
         frame_width = int(cap.get(3))
         frame_height = int(cap.get(4))
-        out = cv2.VideoWriter("detections_" + video_file,cv2.CAP_FFMPEG,cv2.VideoWriter_fourcc('H','2','6','4'), 30, (frame_width,frame_height))
+        out = cv2.VideoWriter(save_file,cv2.CAP_FFMPEG,cv2.VideoWriter_fourcc('H','2','6','4'), 30, (frame_width,frame_height))
     
     #main loop   
     start = time.time()
@@ -40,7 +40,7 @@ def detect_video(video_file, detector, verbose = True, show = True, save = False
             print("FPS of the video is {:5.2f}".format( frames / (time.time() - start)))
             
              # save frame to file if necessary
-            if save:
+            if save_file != None:
                 out.write(im_out)
             
             # output frame if necessary
@@ -120,29 +120,8 @@ def match_all(coords_list,match_fn = match_greedy):
         out_list.append(match_fn(first,second))
     return out_list
 
-# testing code    
-if __name__ == "__main__":
-    # loads model unless already loaded
-#    try:
-#       net
-#    except:
-#        net = Darknet_Detector('pytorch_yolo_v3/cfg/yolov3.cfg','pytorch_yolo_v3/yolov3.weights','pytorch_yolo_v3/data/coco.names',0.5,0.1,80,1024)
-#        print("Model reloaded.")
-#    
-#        # tests that net is working correctly
-#        test ='pytorch_yolo_v3/imgs/person.jpg'
-#        out = net.detect(test)
-#        torch.cuda.empty_cache()    
-#        
-#    video_file = 'capture_005.avi'
-#    video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
-#    detections = detect_video(video_file,net,show = True, save=False)
-#    coords = condense_detections(detections)
-    matchings = match_all(coords)   
+def get_objects(matchings, coords,snap_threshold = 30, frames_lost_lim = 20):
     
-    
-    snap_threshold = 0
-    frames_lost_lim = 0
     active_objs = []
     inactive_objs = []
     
@@ -166,7 +145,7 @@ if __name__ == "__main__":
         matched_in_next = [] # keeps track of which objects from next frame are already dealt with
         
         # first, deal with all existing objects (each loop deals with one object)
-        # o is the object index
+        # o is the objecobjs[4]t index
         # obj is the object 
         for o, obj in enumerate(active_objs):
             matched = False
@@ -204,9 +183,7 @@ if __name__ == "__main__":
                 
                     if obj['fsld'] > frames_lost_lim:
                         move_to_inactive.append(o)
-                
-
-                
+            
         # now, deal with objects found only in second frame  - each row is one object  
         for k, row in enumerate(coords[f+1]):
             # if row was matched in previous frame, the object has already been dealt with
@@ -228,4 +205,106 @@ if __name__ == "__main__":
         for idx in move_to_inactive:
             inactive_objs.append(active_objs[idx])
             del active_objs[idx]
-    all_objs = active_objs + inactive_objs
+            
+    return active_objs + inactive_objs
+
+def extract_obj_coords(detections):
+    coords = condense_detections(detections)
+    matchings = match_all(coords)   
+    objs = get_objects(matchings, coords)
+
+    # create an array where each row represents a frame and each two columns represent an object
+    points_array = np.zeros([len(coords),len(objs)*2])-1
+    for j in range(0,len(objs)):
+        obj = objs[j]
+        first_frame = int(obj['first_frame'])
+        for i in range(0,len(obj['all'])):
+            points_array[i+first_frame,j*2] = obj['all'][i][0]
+            points_array[i+first_frame,(j*2)+1] = obj['all'][i][1]\
+            
+    return points_array, objs
+
+def draw_track(points_array, file_in, file_out = None, show = False): 
+    # load video file 
+    cap = cv2.VideoCapture(file_in)
+    assert cap.isOpened(), "Cannot open file \"{}\"".format(save_file)
+    
+    # opens VideoWriter object for saving video file if necessary
+    if file_out != None:
+        # open video_writer object
+        frame_width = int(cap.get(3))
+        frame_height = int(cap.get(4))
+        out = cv2.VideoWriter(file_out,cv2.CAP_FFMPEG,cv2.VideoWriter_fourcc('H','2','6','4'), 30, (frame_width,frame_height))
+    
+    ret = True
+    start = time.time()
+    frame_num = 0
+    
+    while cap.isOpened():
+        
+        if ret:
+            # read one frame
+            ret, frame = cap.read()
+            
+            colormaps = [(255,255,0),(255,0,255),(0,255,255),(0,255,0),(255,0,0),(0,0,255)]
+            for i in range(0, int(len(points_array[0])/2)):
+                try:
+                    center = (int(points_array[frame_num,i*2]),int(points_array[frame_num,(i*2)+1]))
+                    cv2.circle(frame,center, 10, colormaps[i%len(colormaps)], thickness = -1)
+                except:
+                    pass # last frame is perhaps not done correctly
+            im_out = frame #write here
+            
+             # save frame to file if necessary
+            if file_out != None:
+                out.write(im_out)
+            
+            # output frame
+            if show:
+                im = cv2.resize(im_out, (1920, 1080))               
+                cv2.imshow("frame", im)
+                key = cv2.waitKey(1)
+                if key & 0xFF == ord('q'):
+                    break
+                continue
+                
+            #summary statistics
+            frame_num += 1
+            print("FPS of the video is {:5.2f}".format( frame_num / (time.time() - start)))
+            
+        else:
+            break
+    # close all resources used      
+    cap.release()
+    cv2.destroyAllWindows()
+    try:
+        out.release()
+    except:
+        pass
+
+
+# testing code    
+if __name__ == "__main__":
+#    # loads model unless already loaded
+#    try:
+#       net
+#    except:
+#        net = Darknet_Detector('pytorch_yolo_v3/cfg/yolov3.cfg','pytorch_yolo_v3/yolov3.weights','pytorch_yolo_v3/data/coco.names',0.5,0.1,80,1024)
+#        print("Model reloaded.")
+#    
+#        # tests that net is working correctly
+#        test ='pytorch_yolo_v3/imgs/person.jpg'
+#        out = net.detect(test)
+#        torch.cuda.empty_cache()    
+#        
+#    video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
+    save_file = 'test_out.avi'
+    final_file = 'track2.avi'
+#    detections = detect_video(video_file,net,show = True, save_file = 'test_out.avi')
+#    np.save("detections.npy", detections)
+    try:
+        detections
+    except:
+        detections = np.load("detections.npy",allow_pickle= True)
+    points_array, objs = extract_obj_coords(detections)
+    draw_track(points_array,save_file,'out2.avi',show = False)
