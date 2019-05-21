@@ -95,14 +95,13 @@ def match_greedy(first,second,threshold = 10):
     
     # select closest pair
     matchings = np.zeros(len(first))-1
-    unflat = lambda x: (x%len(second), x //len(second))
+    unflat = lambda x: (x//len(second), x %len(second))
     while np.min(dist) < threshold:
         min_f, min_s = unflat(np.argmin(dist))
+        #print(min_f,min_s,len(first),len(second),len(matchings),np.argmin(dist))
         matchings[min_f] = min_s
-        dist[:,min_f] = np.inf
         dist[:,min_s] = np.inf
         dist[min_f,:] = np.inf
-        dist[min_s,:] = np.inf
         
     return matchings
 
@@ -123,7 +122,7 @@ def match_all(coords_list,match_fn = match_greedy):
 
 # testing code    
 if __name__ == "__main__":
-#    # loads model unless already loaded
+    # loads model unless already loaded
 #    try:
 #       net
 #    except:
@@ -142,8 +141,8 @@ if __name__ == "__main__":
     matchings = match_all(coords)   
     
     
-    snap_threshold = 10
-    frames_lost_lim = 5
+    snap_threshold = 0
+    frames_lost_lim = 0
     active_objs = []
     inactive_objs = []
     
@@ -160,17 +159,22 @@ if __name__ == "__main__":
         active_objs.append(obj)
     
     # for one set of matchings between frames - this loop will run (# frames -1) times
-    for cur_frame, frame_set in enumerate(matchings):
+    # f is the frame number
+    # frame_set is the 1 x objects numopy array of matchings from frame f to frame f+1
+    for f, frame_set in enumerate(matchings):
         move_to_inactive = []
         matched_in_next = [] # keeps track of which objects from next frame are already dealt with
         
         # first, deal with all existing objects (each loop deals with one object)
+        # o is the object index
+        # obj is the object 
         for o, obj in enumerate(active_objs):
+            matched = False
             obj_id_next = int(frame_set[obj['obj_id']]) # get the index of object in next frame or -1 if not matched in next frame
-            
-            if obj_id_next != -1: # object has a match
+            # first deals with problem of reverse indexing, second verifies there is a match
+            if obj['obj_id'] != -1 and obj_id_next != -1: # object has a match
                 obj['obj_id'] = obj_id_next
-                obj['current'] = (coords[i+1][obj_id_next,0],coords[i+1][obj_id_next,1])
+                obj['current'] = (coords[f+1][obj_id_next,0],coords[f+1][obj_id_next,1])
                 obj['all'].append(obj['current'])
                 obj['fsld'] = 0
                 
@@ -179,7 +183,7 @@ if __name__ == "__main__":
                 
             else: # object does not have a certain match in next frame
                 # search for match among detatched objects
-                for j, row in enumerate(coords[i+1]):
+                for j, row in enumerate(coords[f+1]):
                     if j not in matched_in_next: # not already matched to object in previous frame
                         # calculate distance to current obj
                         distance = np.sqrt((obj['current'][0]-row[0])**2 + (obj['current'][1]-row[1])**2)
@@ -191,7 +195,7 @@ if __name__ == "__main__":
                             
                             matched_in_next.append(j)
                             matched = True
-                        
+                            break
                 # if no match at all
                 if not matched:
                     obj['obj_id'] = -1
@@ -204,7 +208,7 @@ if __name__ == "__main__":
 
                 
         # now, deal with objects found only in second frame  - each row is one object  
-        for k, row in enumerate(coords[i+1]):
+        for k, row in enumerate(coords[f+1]):
             # if row was matched in previous frame, the object has already been dealt with
             if k not in matched_in_next:
                 # create a new object
@@ -213,14 +217,15 @@ if __name__ == "__main__":
                         'all': [], # keeps track of all positions of the object
                         'obj_id': k, # position in coords list
                         'fsld': 0,   # frames since last detected
-                        'first_frame': cur_frame # frame in which object is first detected
+                        'first_frame': f # frame in which object is first detected
                         }
-                obj['all'].append(obj['current']) 
-                active_objs.append(obj)
+                new_obj['all'].append(new_obj['current']) 
+                active_objs.append(new_obj)
                 
         # lastly, move all objects in move_to_inactive
         move_to_inactive.sort()
         move_to_inactive.reverse()
         for idx in move_to_inactive:
-            inactive_objs.append(active_objs(idx))
+            inactive_objs.append(active_objs[idx])
             del active_objs[idx]
+    all_objs = active_objs + inactive_objs
