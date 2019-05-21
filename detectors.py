@@ -224,7 +224,7 @@ def extract_obj_coords(detections):
             
     return points_array, objs
 
-def plot_track(points_array, file_in, file_out = None, show = False): 
+def draw_track(points_array, file_in, file_out = None, show = False): 
     # load video file 
     cap = cv2.VideoCapture(file_in)
     assert cap.isOpened(), "Cannot open file \"{}\"".format(save_file)
@@ -285,34 +285,26 @@ def plot_track(points_array, file_in, file_out = None, show = False):
 
 # testing code    
 if __name__ == "__main__":
-    # loads model unless already loaded
-    try:
-       net
-    except:
-        net = Darknet_Detector('pytorch_yolo_v3/cfg/yolov3.cfg','pytorch_yolo_v3/yolov3.weights','pytorch_yolo_v3/data/coco.names',0.52,0.9,80,1024)
-        print("Model reloaded.")
-    
-        if False:
-            # tests that net is working correctly
-            test ='pytorch_yolo_v3/imgs/person.jpg'
-            out = net.detect(test)
-            torch.cuda.empty_cache()    
-        
-    # define file names
-    input_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
+#    # loads model unless already loaded
+#    try:
+#       net
+#    except:
+#        net = Darknet_Detector('pytorch_yolo_v3/cfg/yolov3.cfg','pytorch_yolo_v3/yolov3.weights','pytorch_yolo_v3/data/coco.names',0.5,0.1,80,1024)
+#        print("Model reloaded.")
+#    
+#        # tests that net is working correctly
+#        test ='pytorch_yolo_v3/imgs/person.jpg'
+#        out = net.detect(test)
+#        torch.cuda.empty_cache()    
+#        
+#    video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
     save_file = 'test_out.avi'
     final_file = 'track2.avi'
-    
-    # get object detections
-    detections = detect_video(input_file,net,show = True, save_file = 'test_out.avi')
-    np.save("detections.npy", detections)
+#    detections = detect_video(video_file,net,show = True, save_file = 'test_out.avi')
+#    np.save("detections.npy", detections)
     try:
         detections
     except:
         detections = np.load("detections.npy",allow_pickle= True)
-        
-    # track objects between frames
     points_array, objs = extract_obj_coords(detections)
-    
-    #plot objects
-    plot_track(points_array,save_file,'out2.avi',show = False)
+    draw_track(points_array,save_file,'out2.avi',show = False)
