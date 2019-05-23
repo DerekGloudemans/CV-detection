@@ -3,7 +3,7 @@ import time
 import torch
 import numpy as np
 import cv2 
-
+import matplotlib.pyplot as plt
 
 def detect_video(video_file, detector, verbose = True, show = True, save_file = None):
     
@@ -282,3 +282,91 @@ def draw_track(points_array, file_in, file_out = None, show = False):
         out.release()
     except:
         pass
+
+
+
+def avg_transform_error(orig,trans,M):
+    n_pts = len(orig)
+    sum_error = 0
+    
+    for i in range(0,n_pts):
+        tf = np.matmul(M,np.transpose(orig[i,:]))
+        x = tf[0]/tf[2]
+        y = tf[1]/tf[2]
+        x_true = trans[i,0]/trans[i,2]
+        y_true = trans[i,1]/trans[i,2]
+        error = np.sqrt((x-x_true)**2+(y-y_true)**2)
+        sum_error+= error
+    return sum_error/n_pts
+
+
+def find_transform(orig,trans):
+    """
+    finds the best projective transform (8 parameters) to transform coordinates
+    from one 2D image space to another
+    
+    orig - a Nx2 array of points in the original image space
+    out - a Nx2 array of points in the transformed image space
+    
+    output - the 3 x 3 pixel transformation matrix M
+    """
+    n_pts = len(orig)
+    delta = 0.1 # gradient step size
+    alpha = 0.1 # learning rate
+    epsilon = 0.01 # convergence parameter
+    decay = 1
+    # initialize M
+    M = np.ones([3,3])
+    
+    # add third row to each set of points
+    third = np.ones([n_pts,3])
+    third[:,:-1] = orig
+    orig = third
+    third[:,:-1] = trans
+    trans = third
+    
+    errors = []
+    old_error = np.inf
+    iteration = 0
+    while old_error > epsilon and iteration < 100000 :
+        # get average error for all points
+        old_error = avg_transform_error(orig,trans,M)
+        
+        # estimate gradients with small step size
+        grad = np.zeros([3,3])
+        for i in range(0,3):
+            for j in range(0,3):
+                if i == 2 and j == 2:
+                    grad[i,j] = 0
+                else:
+                    M[i,j] = M[i,j] + delta
+                    new_error = avg_transform_error(orig,trans,M)
+                    M[i,j] = M[i,j] - delta # reset change
+                    grad[i,j] = (new_error-old_error)/delta
+                    
+        # update M with gradient descent
+        M = M - grad*alpha
+        
+        # update parameters
+        iteration = iteration + 1
+        if iteration < 10000:
+            delta = delta* decay
+            alpha = alpha * decay
+        errors.append(old_error)
+        if True and iteration % 1000 == 0:
+            print('Iteration {} -- Max error: {}'.format(iteration, old_error))
+        
+    return M,errors
+
+def transform_pt(pt,M):
+    aug_pt = np.transpose(np.concatenate((pt,np.ones(1))))
+    tf_pt = np.matmul(M,aug_pt)
+    return tf_pt[0:-1]/tf_pt[-1]
+
+x = np.array([[0,0],[0,1],[1,0],[1,1]])
+y = np.array([[1,1],[1,2],[2,1],[2,2]])  
+M_correct = np.array([[1,0,1],[0,1,1],[0,0,1]])
+
+M,err = find_transform(x,y)
+test = transform_pt(x[1],M)
+plt.plot(err)
