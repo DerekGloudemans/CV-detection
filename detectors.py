@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import cv2 
 import matplotlib.pyplot as plt
-from pytorch_yolo_v3.detector import Darknet_Detector
+from pytorch_yolo_v3.yolo_detector import Darknet_Detector
 
 def detect_video(video_file, detector, verbose = True, show = True, save_file = None):
     
@@ -285,23 +285,32 @@ def draw_track(points_array, file_in, file_out = None, show = False):
 
 # testing code    
 if __name__ == "__main__":
-#    # loads model unless already loaded
-#    try:
-#       net
-#    except:
-#        net = Darknet_Detector('pytorch_yolo_v3/cfg/yolov3.cfg','pytorch_yolo_v3/yolov3.weights','pytorch_yolo_v3/data/coco.names',0.5,0.1,80,1024)
-#        print("Model reloaded.")
-#    
-#        # tests that net is working correctly
-#        test ='pytorch_yolo_v3/imgs/person.jpg'
-#        out = net.detect(test)
-#        torch.cuda.empty_cache()    
-#        
-#    video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
+    # loads model unless already loaded
+    try:
+       net
+    except:
+        params = {'cfg_file' :'pytorch_yolo_v3/cfg/yolov3.cfg',
+                  'wt_file': 'pytorch_yolo_v3/yolov3.weights',
+                  'class_file': 'pytorch_yolo_v3/data/coco.names',
+                  'pallete_file': 'pytorch_yolo_v3/pallete',
+                  'nms_threshold': 0.1,
+                  'conf': 0.52,
+                  'resolution': 1024,
+                  'num_classes': 80}
+        
+        net = Darknet_Detector(**params)
+        print("Model reloaded.")
+    
+        # tests that net is working correctly
+        test ='pytorch_yolo_v3/imgs/person.jpg'
+        out = net.detect(test)
+        torch.cuda.empty_cache()    
+        
+    video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
     save_file = 'test_out.avi'
     final_file = 'track2.avi'
-#    detections = detect_video(video_file,net,show = True, save_file = 'test_out.avi')
-#    np.save("detections.npy", detections)
+    detections = detect_video(video_file,net,show = True, save_file = 'test_out.avi')
+    np.save("detections.npy", detections)
     try:
         detections
     except:
