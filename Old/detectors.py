@@ -121,7 +121,9 @@ def match_all(coords_list,match_fn = match_greedy):
     return out_list
 
 def get_objects(matchings, coords,snap_threshold = 30, frames_lost_lim = 20):
-    
+    """
+    Uses matchings to find all unique objects accross multiple frames
+    """
     active_objs = []
     inactive_objs = []
     
