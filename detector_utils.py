@@ -311,22 +311,20 @@ def find_transform(orig,trans):
     output - the 3 x 3 pixel transformation matrix M
     """
     n_pts = len(orig)
-    delta = 0.1 # gradient step size
-    alpha = 0.1 # learning rate
-    epsilon = 0.01 # convergence parameter
-    decay = 1
+    delta = .0001 # gradient step size .001
+    alpha = 0.01 # learning rate .01
+    epsilon = 0.001 # convergence parameter .001
+    decay = .9999 #.9999
     # initialize M
-    M = np.ones([3,3])
+    M = np.ones([3,3])*1.0
     
     # add third row to each set of points
-    third = np.ones([n_pts,3])
-    third[:,:-1] = orig
-    orig = third
-    third[:,:-1] = trans
-    trans = third
+    third = np.ones([n_pts,1])
+    orig = np.concatenate((orig,third),1)
+    trans = np.concatenate((trans,third),1)
     
     errors = []
-    old_error = np.inf
+    old_error =  avg_transform_error(orig,trans,M)
     iteration = 0
     while old_error > epsilon and iteration < 100000 :
         # get average error for all points
@@ -352,6 +350,7 @@ def find_transform(orig,trans):
         if iteration < 10000:
             delta = delta* decay
             alpha = alpha * decay
+            
         errors.append(old_error)
         if True and iteration % 1000 == 0:
             print('Iteration {} -- Max error: {}'.format(iteration, old_error))
