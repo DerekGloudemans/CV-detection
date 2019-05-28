@@ -313,8 +313,8 @@ def find_transform(orig,trans):
     n_pts = len(orig)
     delta = .0001 # gradient step size .001
     alpha = 0.01 # learning rate .01
-    epsilon = 0.001 # convergence parameter .001
-    decay = .9999 #.9999
+    epsilon = 0.0001 # convergence parameter .001
+    decay = .99975 #.9999
     # initialize M
     M = np.ones([3,3])*1.0
     
