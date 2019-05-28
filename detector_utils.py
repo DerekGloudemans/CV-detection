@@ -362,10 +362,39 @@ def transform_pt(pt,M):
     tf_pt = np.matmul(M,aug_pt)
     return tf_pt[0:-1]/tf_pt[-1]
 
-x = np.array([[0,0],[0,1],[1,0],[1,1]])
-y = np.array([[1,1],[1,2],[2,1],[2,2]])  
-M_correct = np.array([[1,0,1],[0,1,1],[0,0,1]])
-
-M,err = find_transform(x,y)
-test = transform_pt(x[1],M)
-plt.plot(err)
+#x = np.array([[0,0],[0,1],[1,0],[1,1]])
+#y = np.array([[1,1],[1,2],[2,1],[2,2]])  
+#M_correct = np.array([[1,0,1],[0,1,1],[0,0,1]])
+#
+#M,err = find_transform(x,y)
+#test = transform_pt(x[1],M)
+#plt.plot(err)
+    
+def transform_pt_array(point_array,M):
+    """
+    Applies 3 x 3  image transformation matrix M to each point stored in the point array
+    """
+    
+    original_shape = point_array.shape
+    
+    num_points = int(np.size(point_array,0)*np.size(point_array,1)/2)
+    # resize array into N x 2 array
+    reshaped = point_array.reshape((num_points,2))   
+    
+    # add third row
+    ones = np.ones([num_points,1])
+    points3d = np.concatenate((reshaped,ones),1)
+    
+    # transform points
+    tf_points3d = np.transpose(np.matmul(M,np.transpose(points3d)))
+    
+    # condense to two-dimensional coordinates
+    tf_points = np.zeros([num_points,2])
+    tf_points[:,0] = tf_points3d[:,0]/tf_points3d[:,2]
+    tf_points[:,1] = tf_points3d[:,1]/tf_points3d[:,2]
+    
+    tf_point_array = tf_points.reshape(original_shape)
+    
+    return tf_point_array
+        
+test_out = transform_pt_array(test,M_correct)

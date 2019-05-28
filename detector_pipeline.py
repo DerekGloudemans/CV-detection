@@ -30,13 +30,15 @@ if __name__ == "__main__":
         torch.cuda.empty_cache()    
         
     video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
-    save_file = 'test_out.avi'
-    final_file = 'track2.avi'
-    detections = detect_video(video_file,net,show = True, save_file = 'test_out.avi')
+    save_file = 'test_out3.avi'
+    final_file = 'test_track3.avi'
+    show = True
+    
+    detections = detect_video(video_file,net,show, save_file=save_file)
     np.save("detections.npy", detections)
     try:
         detections
     except:
         detections = np.load("detections.npy",allow_pickle= True)
     points_array, objs = extract_obj_coords(detections)
-    draw_track(points_array,save_file,'out2.avi',show = False)
+    draw_track(points_array,save_file,final_file)
