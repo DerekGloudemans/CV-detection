@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import cv2 
 from pytorch_yolo_v3.yolo_detector import Darknet_Detector
-import matplotlib.pyplot as plt
+
 from detector_utils import detect_video, extract_obj_coords, draw_track
 
   
@@ -42,5 +42,3 @@ if __name__ == "__main__":
         detections = np.load("detections.npy",allow_pickle= True)
     points_array, objs = extract_obj_coords(detections)
     draw_track(points_array,save_file,final_file)
-    
-    
