@@ -311,10 +311,10 @@ def find_transform(orig,trans):
     output - the 3 x 3 pixel transformation matrix M
     """
     n_pts = len(orig)
-    delta = .0001 # gradient step size .001
-    alpha = 0.01 # learning rate .01
+    delta = 0.000001 # gradient step size .001
+    alpha = 0.1 # learning rate .01
     epsilon = 0.0001 # convergence parameter .001
-    decay = .99975 #.9999
+    decay = .99999075 #.9999
     # initialize M
     M = np.ones([3,3])*1.0
     
@@ -326,7 +326,7 @@ def find_transform(orig,trans):
     errors = []
     old_error =  avg_transform_error(orig,trans,M)
     iteration = 0
-    while old_error > epsilon and iteration < 100000 :
+    while old_error > epsilon and iteration < 10000000 :
         # get average error for all points
         old_error = avg_transform_error(orig,trans,M)
         
@@ -353,7 +353,7 @@ def find_transform(orig,trans):
             
         errors.append(old_error)
         if True and iteration % 1000 == 0:
-            print('Iteration {} -- Max error: {}'.format(iteration, old_error))
+            print('Iteration {} -- Error: {}'.format(iteration, old_error))
         
     return M,errors
 
@@ -397,4 +397,6 @@ def transform_pt_array(point_array,M):
     
     return tf_point_array
         
-test_out = transform_pt_array(test,M_correct)
+cam = np.load('im_coord_matching/cam_points.npy')
+world = np.load('im_coord_matching/world_points.npy')
+tf = find_transform(cam,world)
