@@ -1,4 +1,5 @@
 from __future__ import division
+from itertools import combinations
 import time
 import torch
 import numpy as np
@@ -283,92 +284,24 @@ def draw_track(points_array, file_in, file_out = None, show = False):
     except:
         pass
 
-
-
-def avg_transform_error(orig,trans,M):
+def avg_transform_error(orig,trans):
     n_pts = len(orig)
     sum_error = 0
     
     for i in range(0,n_pts):
-        tf = np.matmul(M,np.transpose(orig[i,:]))
-        x = tf[0]/tf[2]
-        y = tf[1]/tf[2]
-        x_true = trans[i,0]/trans[i,2]
-        y_true = trans[i,1]/trans[i,2]
+        x = orig[i,0]
+        y = orig[i,0]
+        x_true = trans[i,0]
+        y_true = trans[i,1]
         error = np.sqrt((x-x_true)**2+(y-y_true)**2)
         sum_error+= error
     return sum_error/n_pts
 
 
-def find_transform(orig,trans):
-    """
-    finds the best projective transform (8 parameters) to transform coordinates
-    from one 2D image space to another
-    
-    orig - a Nx2 array of points in the original image space
-    out - a Nx2 array of points in the transformed image space
-    
-    output - the 3 x 3 pixel transformation matrix M
-    """
-    n_pts = len(orig)
-    delta = .0001 # gradient step size .001
-    alpha = 0.01 # learning rate .01
-    epsilon = 0.0001 # convergence parameter .001
-    decay = .99975 #.9999
-    # initialize M
-    M = np.ones([3,3])*1.0
-    
-    # add third row to each set of points
-    third = np.ones([n_pts,1])
-    orig = np.concatenate((orig,third),1)
-    trans = np.concatenate((trans,third),1)
-    
-    errors = []
-    old_error =  avg_transform_error(orig,trans,M)
-    iteration = 0
-    while old_error > epsilon and iteration < 100000 :
-        # get average error for all points
-        old_error = avg_transform_error(orig,trans,M)
-        
-        # estimate gradients with small step size
-        grad = np.zeros([3,3])
-        for i in range(0,3):
-            for j in range(0,3):
-                if i == 2 and j == 2:
-                    grad[i,j] = 0
-                else:
-                    M[i,j] = M[i,j] + delta
-                    new_error = avg_transform_error(orig,trans,M)
-                    M[i,j] = M[i,j] - delta # reset change
-                    grad[i,j] = (new_error-old_error)/delta
-                    
-        # update M with gradient descent
-        M = M - grad*alpha
-        
-        # update parameters
-        iteration = iteration + 1
-        if iteration < 10000:
-            delta = delta* decay
-            alpha = alpha * decay
-            
-        errors.append(old_error)
-        if True and iteration % 1000 == 0:
-            print('Iteration {} -- Max error: {}'.format(iteration, old_error))
-        
-    return M,errors
-
 def transform_pt(pt,M):
     aug_pt = np.transpose(np.concatenate((pt,np.ones(1))))
     tf_pt = np.matmul(M,aug_pt)
     return tf_pt[0:-1]/tf_pt[-1]
-
-x = np.array([[0,0],[0,1],[1,0],[1,1]])
-y = np.array([[1,1],[1,2],[2,1],[2,2]])  
-M_correct = np.array([[1,0,1],[0,1,1],[0,0,1]])
-
-M,err = find_transform(x,y)
-test = transform_pt(x[1],M)
-plt.plot(err)
     
 def transform_pt_array(point_array,M):
     """
@@ -396,7 +329,35 @@ def transform_pt_array(point_array,M):
     tf_point_array = tf_points.reshape(original_shape)
     
     return tf_point_array
-        
+    
+def get_best_transform(x,y):
+    """
+    given a set of N points in both x and y space, finds the best (lowest avg error)
+    transform of 4 points using oppenCV's getPerspectiveTransform
+    returns- transformation matrix M
+    """
+    x = np.float32(x)
+    y = np.float32(y)
+    all_idx = [i for i in range(0,len(x))]
+    combos = tuple(combinations(all_idx,4))
+    min_err = np.inf
+    bestM = 0
+    for comb in combos:
+         M = cv2.getPerspectiveTransform(x[comb,:],y[comb,:])
+         xtf = transform_pt_array(x,M)
+         err = avg_transform_error(xtf,y)
+         if err < min_err:
+             min_err = err
+             bestM = M
+             bestComb = comb
+    return bestM
+
+
+x = np.array([[0,0],[0,1],[1,0],[1,1]])
+y = np.array([[1,1],[1,2],[2,1],[2,2]])  
+M_correct = np.array([[1,0,1],[0,1,1],[0,0,1]])
+
 cam = np.load('im_coord_matching/cam_points.npy')
 world = np.load('im_coord_matching/world_points.npy')
-tf = find_transform(cam,world)
+M = get_best_transform(cam,world)
+camtf = transform_pt_array(cam,bestM)
