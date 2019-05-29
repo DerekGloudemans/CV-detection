@@ -5,6 +5,7 @@ import torch
 import numpy as np
 import cv2 
 import matplotlib.pyplot as plt
+import random
 
 def detect_video(video_file, detector, verbose = True, show = True, save_file = None):
     
@@ -252,7 +253,7 @@ def draw_track(points_array, file_in, file_out = None, show = False):
             for i in range(0, int(len(points_array[0])/2)):
                 try:
                     center = (int(points_array[frame_num,i*2]),int(points_array[frame_num,(i*2)+1]))
-                    cv2.circle(frame,center, 10, colormaps[i%len(colormaps)], thickness = -1)
+                    cv2.circle(frame,center, 3, colormaps[i%len(colormaps)], thickness = -1)
                 except:
                     pass # last frame is perhaps not done correctly
             im_out = frame #write here
@@ -284,6 +285,67 @@ def draw_track(points_array, file_in, file_out = None, show = False):
     except:
         pass
 
+
+def draw_world(point_array, file_in, file_out = None, show = True):
+    """
+    outputs a video with points drawn on an image of the the world at each frame's 
+    timestep
+    """
+    
+    # load background image 
+    world_im = cv2.imread(file_in)
+    
+    # opens VideoWriter object for saving video file if necessary
+    if file_out != None:
+        # open video_writer object
+        frame_width = int(world_im.shape[1])
+        frame_height = int(world_im.shape[0])
+        out = cv2.VideoWriter(file_out,cv2.CAP_FFMPEG,cv2.VideoWriter_fourcc('H','2','6','4'), 30, (frame_width,frame_height))
+    
+    # define random colors for each object
+    colormaps = [(random.randrange(0,255),random.randrange(0,255), random.randrange(0,255)) for k in range(0,int(len(point_array[0])/2))]
+    
+    start = time.time()
+    frame_num = 0
+    # each loop processes one frame
+    for fr in point_array:
+            # create fresh copy of background
+            frame = world_im.copy()
+            
+            # loop through points_array and plot circles on background
+            for i in range(0, int(len(point_array[0])/2)):
+                try:
+                    center = (int(point_array[frame_num,i*2]),int(point_array[frame_num,(i*2)+1]))
+                    cv2.circle(frame,center, 10, colormaps[i], thickness = -1)
+                except:
+                    pass # last frame is perhaps not done correctly, may also catch points that fall off image boundary
+            
+             # save frame to file if necessary
+            if file_out != None:
+                out.write(frame)
+            
+            # output frame
+            if show:
+                #im = cv2.resize(im_out, (1920, 1080))               
+                cv2.imshow("frame", frame)
+                key = cv2.waitKey(1)
+                if key & 0xFF == ord('q'):
+                    break
+                #continue
+                
+            #summary statistics
+            frame_num += 1
+            print("FPS of the video is {:5.2f}".format( frame_num / (time.time() - start)))
+        
+    # close all resources used      
+    cv2.destroyAllWindows()
+    try:
+        out.release()
+    except:
+        pass
+    
+
+
 def avg_transform_error(orig,trans):
     n_pts = len(orig)
     sum_error = 0
@@ -297,11 +359,6 @@ def avg_transform_error(orig,trans):
         sum_error+= error
     return sum_error/n_pts
 
-
-def transform_pt(pt,M):
-    aug_pt = np.transpose(np.concatenate((pt,np.ones(1))))
-    tf_pt = np.matmul(M,aug_pt)
-    return tf_pt[0:-1]/tf_pt[-1]
     
 def transform_pt_array(point_array,M):
     """
@@ -336,6 +393,12 @@ def get_best_transform(x,y):
     transform of 4 points using oppenCV's getPerspectiveTransform
     returns- transformation matrix M
     """
+    # test a simple translation
+    if False:
+        x = np.array([[0,0],[0,1],[1,0],[1,1]])
+        y = np.array([[1,1],[1,2],[2,1],[2,2]])  
+        M_correct = np.array([[1,0,1],[0,1,1],[0,0,1]])
+        
     x = np.float32(x)
     y = np.float32(y)
     all_idx = [i for i in range(0,len(x))]
@@ -352,14 +415,5 @@ def get_best_transform(x,y):
              bestComb = comb
     return bestM
 
-# test a simple translation
-if False:
-    x = np.array([[0,0],[0,1],[1,0],[1,1]])
-    y = np.array([[1,1],[1,2],[2,1],[2,2]])  
-    M_correct = np.array([[1,0,1],[0,1,1],[0,0,1]])
 
-# get transform for camera to world space
-cam = np.load('im_coord_matching/cam_points.npy')
-world = np.load('im_coord_matching/world_points.npy')
-M = get_best_transform(cam,world)
-camtf = transform_pt_array(cam,bestM)
+
