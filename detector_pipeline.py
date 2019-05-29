@@ -4,11 +4,29 @@ import numpy as np
 import cv2 
 from pytorch_yolo_v3.yolo_detector import Darknet_Detector
 
-from detector_utils import detect_video, extract_obj_coords, draw_track, \
-                           get_best_transform, transform_pt_array, draw_world
+from detector_utils import detect_video,\
+                           extract_obj_coords,\
+                           draw_track,\
+                           get_best_transform,\
+                           transform_pt_array,\
+                           draw_world,\
+                           draw_track_world
 
   
 if __name__ == "__main__":
+    
+    
+    savenum = 1 # assign unique num to avoid overwriting as necessary
+    
+    # name in and out files
+    video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
+    detect_file = 'detect{}.avi'.format(savenum) 
+    track_file = 'track{}.avi'.format(savenum)
+    world_file = 'world{}.avi'.format(savenum)
+    comb_file = 'comb{}.avi'.format(savenum)
+    background_file = 'im_coord_matching/vwd.png'
+    show = True
+    
     # loads model unless already loaded
     try:
        net
@@ -31,30 +49,22 @@ if __name__ == "__main__":
             out = net.detect(test)
             torch.cuda.empty_cache()    
       
-    # name in and out files
-    savenum = 1 # assign unique num to avoid overwriting as necessary
-    video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
-    detect_file = 'detect{}.avi'.format(savenum) 
-    track_file = 'track{}.avi'.format(savenum)
-    show = True
-    
     # get detections
-#    detections = detect_video(video_file,net,show, save_file=detect_file)
-#    np.save("detections.npy", detections)
-    if True: # enable to skip detections step
-        try:
-            detections
-        except:
-            detections = np.load("detections.npy",allow_pickle= True)
+    try:
+        detections = np.load("detections{}.npy".format(savenum),allow_pickle= True)
+    except:
+        detections = detect_video(video_file,net,show, save_file=detect_file)
+        np.save("detections{}.npy".format(savenum), detections)
+
+    # track objects and draw on video
+    point_array, objs = extract_obj_coords(detections)
+    draw_track(point_array,detect_file,track_file,show = True)
     
-#    # track objects and draw on video
-#    point_array, objs = extract_obj_coords(detections)
-#    draw_track(point_array,detect_file,track_file)
-#    
-#    # get transform for camera to world space
-#    cam_pts = np.load('im_coord_matching/cam_points.npy')
-#    world_pts = np.load('im_coord_matching/world_points.npy')
-#    M = get_best_transform(cam_pts,world_pts)
-#    tf_points = transform_pt_array(point_array,M)
-    
-    draw_world(tf_points,'im_coord_matching/vwd.png','test_out33.avi')
+    # get transform for camera to world space and transform object points
+    cam_pts = np.load('im_coord_matching/cam_points.npy')
+    world_pts = np.load('im_coord_matching/world_points.npy')
+    M = get_best_transform(cam_pts,world_pts)
+    tf_points = transform_pt_array(point_array,M)
+        
+    # plot together
+    draw_track_world(point_array,tf_points,background_file,detect_file,comb_file,show = True)

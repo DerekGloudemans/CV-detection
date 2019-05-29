@@ -62,6 +62,7 @@ def detect_video(video_file, detector, verbose = True, show = True, save_file = 
         pass
     torch.cuda.empty_cache()
  
+    print("Detection finished")
     return all_detections
 
 def condense_detections(detections):
@@ -227,10 +228,10 @@ def extract_obj_coords(detections):
             
     return points_array, objs
 
-def draw_track(points_array, file_in, file_out = None, show = False): 
+def draw_track(point_array, file_in, file_out = None, show = False): 
     # load video file 
     cap = cv2.VideoCapture(file_in)
-    assert cap.isOpened(), "Cannot open file \"{}\"".format(save_file)
+    assert cap.isOpened(), "Cannot open file \"{}\"".format(file_in)
     
     # opens VideoWriter object for saving video file if necessary
     if file_out != None:
@@ -249,11 +250,13 @@ def draw_track(points_array, file_in, file_out = None, show = False):
             # read one frame
             ret, frame = cap.read()
             
-            colormaps = [(255,255,0),(255,0,255),(0,255,255),(0,255,0),(255,0,0),(0,0,255)]
-            for i in range(0, int(len(points_array[0])/2)):
+            # define random colors for each object
+            colormaps = [(random.randrange(0,255),random.randrange(0,255), random.randrange(0,255)) for k in range(0,int(len(point_array[0])/2))]
+    
+            for i in range(0, int(len(point_array[0])/2)):
                 try:
-                    center = (int(points_array[frame_num,i*2]),int(points_array[frame_num,(i*2)+1]))
-                    cv2.circle(frame,center, 3, colormaps[i%len(colormaps)], thickness = -1)
+                    center = (int(point_array[frame_num,i*2]),int(point_array[frame_num,(i*2)+1]))
+                    cv2.circle(frame,center, 10, colormaps[i%len(colormaps)], thickness = -1)
                 except:
                     pass # last frame is perhaps not done correctly
             im_out = frame #write here
@@ -284,8 +287,10 @@ def draw_track(points_array, file_in, file_out = None, show = False):
         out.release()
     except:
         pass
-
-
+    
+    print("Tracking in camera-space finished.")
+    
+    
 def draw_world(point_array, file_in, file_out = None, show = True):
     """
     outputs a video with points drawn on an image of the the world at each frame's 
@@ -343,8 +348,95 @@ def draw_world(point_array, file_in, file_out = None, show = True):
         out.release()
     except:
         pass
-    
 
+
+def draw_track_world(point_array,tf_point_array,background_in,video_in,file_out = None, show = True):    
+    """
+    combines draw_track and draw_world into a single output video
+    """
+    # load video file 
+    cap = cv2.VideoCapture(video_in)
+    assert cap.isOpened(), "Cannot open file \"{}\"".format(video_in)
+    
+    # load background image 
+    world_im = cv2.imread(background_in)
+    
+    # opens VideoWriter object for saving video file if necessary
+    if file_out != None:
+        # open video_writer object
+        frame_width = int(cap.get(3))+ world_im.shape[1]
+        frame_height = int(cap.get(4))
+        out = cv2.VideoWriter(file_out,cv2.CAP_FFMPEG,cv2.VideoWriter_fourcc('H','2','6','4'), 30, (frame_width,frame_height))
+    
+    # define random colors for each object
+    colormaps = [(random.randrange(0,255),random.randrange(0,255), random.randrange(0,255)) for k in range(0,int(len(point_array[0])/2))]
+    
+    ret = True
+    start = time.time()
+    frame_num = 0
+    
+    while cap.isOpened():
+        
+        if ret:
+            # read one frame
+            ret, frame = cap.read()
+            backg = world_im.copy()
+            
+            for i in range(0, int(len(point_array[0])/2)):
+                # draw points on camera frame
+                try:
+                    center = (int(point_array[frame_num,i*2]),int(point_array[frame_num,(i*2)+1]))
+                    cv2.circle(frame,center, 10, colormaps[i], thickness = -1)
+                except:
+                    pass # last frame is perhaps not done correctly
+                    
+                # draw points on world frame
+                try:
+                    center = (int(tf_point_array[frame_num,i*2]),int(tf_point_array[frame_num,(i*2)+1]))
+                    cv2.circle(backg,center, 10, colormaps[i], thickness = -1)
+                except:
+                    pass # last frame is perhaps not done correctly, may also catch points that fall off image boundary
+            
+            
+            # pad backg image
+            bottom_pad = frame_height-backg.shape[0]
+            pad = cv2.copyMakeBorder(backg, 0 , bottom_pad, 0, 0, cv2.BORDER_CONSTANT, value=(0,0,0))
+            # combine two images into a single image
+            print(pad.shape)
+            print(frame.shape)
+            im_out = np.concatenate((frame,pad),axis = 1)
+
+            # save frame to file if necessary
+            if file_out != None:
+                out.write(im_out)
+            
+            # output frame
+            if show:
+                scale = 0.5
+                resize = (int(frame_width * scale),int(frame_height*scale))
+                im = cv2.resize(im_out, resize)   
+                
+                cv2.imshow("frame", im)
+                key = cv2.waitKey(1)
+                if key & 0xFF == ord('q'):
+                    break
+                continue
+                
+            #summary statistics
+            frame_num += 1
+            print("FPS of the video is {:5.2f}".format( frame_num / (time.time() - start)))
+            
+        else:
+            break
+    # close all resources used      
+    cap.release()
+    cv2.destroyAllWindows()
+    try:
+        out.release()
+    except:
+        pass
+    
+    print("Combination video writing finished.")
 
 def avg_transform_error(orig,trans):
     n_pts = len(orig)
