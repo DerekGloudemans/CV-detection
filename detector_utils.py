@@ -362,13 +362,13 @@ def transform_pt(pt,M):
     tf_pt = np.matmul(M,aug_pt)
     return tf_pt[0:-1]/tf_pt[-1]
 
-#x = np.array([[0,0],[0,1],[1,0],[1,1]])
-#y = np.array([[1,1],[1,2],[2,1],[2,2]])  
-#M_correct = np.array([[1,0,1],[0,1,1],[0,0,1]])
-#
-#M,err = find_transform(x,y)
-#test = transform_pt(x[1],M)
-#plt.plot(err)
+x = np.array([[0,0],[0,1],[1,0],[1,1]])
+y = np.array([[1,1],[1,2],[2,1],[2,2]])  
+M_correct = np.array([[1,0,1],[0,1,1],[0,0,1]])
+
+M,err = find_transform(x,y)
+test = transform_pt(x[1],M)
+plt.plot(err)
     
 def transform_pt_array(point_array,M):
     """
@@ -397,4 +397,6 @@ def transform_pt_array(point_array,M):
     
     return tf_point_array
         
-test_out = transform_pt_array(test,M_correct)
+cam = np.load('im_coord_matching/cam_points.npy')
+world = np.load('im_coord_matching/world_points.npy')
+tf = find_transform(cam,world)
