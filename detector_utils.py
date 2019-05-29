@@ -284,8 +284,6 @@ def draw_track(points_array, file_in, file_out = None, show = False):
     except:
         pass
 
-
-
 def avg_transform_error(orig,trans):
     n_pts = len(orig)
     sum_error = 0
@@ -331,7 +329,29 @@ def transform_pt_array(point_array,M):
     tf_point_array = tf_points.reshape(original_shape)
     
     return tf_point_array
-        
+    
+def get_best_transform(x,y):
+    """
+    given a set of N points in both x and y space, finds the best (lowest avg error)
+    transform of 4 points using oppenCV's getPerspectiveTransform
+    returns- transformation matrix M
+    """
+    x = np.float32(x)
+    y = np.float32(y)
+    all_idx = [i for i in range(0,len(x))]
+    combos = tuple(combinations(all_idx,4))
+    min_err = np.inf
+    bestM = 0
+    for comb in combos:
+         M = cv2.getPerspectiveTransform(x[comb,:],y[comb,:])
+         xtf = transform_pt_array(x,M)
+         err = avg_transform_error(xtf,y)
+         if err < min_err:
+             min_err = err
+             bestM = M
+             bestComb = comb
+    return bestM
+
 
 x = np.array([[0,0],[0,1],[1,0],[1,1]])
 y = np.array([[1,1],[1,2],[2,1],[2,2]])  
@@ -339,21 +359,5 @@ M_correct = np.array([[1,0,1],[0,1,1],[0,0,1]])
 
 cam = np.load('im_coord_matching/cam_points.npy')
 world = np.load('im_coord_matching/world_points.npy')
-cam = np.float32(cam)
-world = np.float32(world)
-    
-
-
-all_idx = [i for i in range(0,len(world))]
-combos = tuple(combinations(all_idx,4))
-min_err = np.inf
-bestM = 0
-for comb in combos:
-     M = cv2.getPerspectiveTransform(cam[comb,:],world[comb,:])
-     camtf = transform_pt_array(cam,M)
-     err = avg_transform_error(camtf,world)
-     if err < min_err:
-         min_err = err
-         bestM = M
-         bestComb = comb
+M = get_best_transform(cam,world)
 camtf = transform_pt_array(cam,bestM)
