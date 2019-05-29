@@ -315,6 +315,7 @@ def find_transform(orig,trans):
     alpha = 0.01 # learning rate .01
     epsilon = 0.0001 # convergence parameter .001
     decay = .99975 #.9999
+    
     # initialize M
     M = np.ones([3,3])*1.0
     
@@ -361,14 +362,6 @@ def transform_pt(pt,M):
     aug_pt = np.transpose(np.concatenate((pt,np.ones(1))))
     tf_pt = np.matmul(M,aug_pt)
     return tf_pt[0:-1]/tf_pt[-1]
-
-x = np.array([[0,0],[0,1],[1,0],[1,1]])
-y = np.array([[1,1],[1,2],[2,1],[2,2]])  
-M_correct = np.array([[1,0,1],[0,1,1],[0,0,1]])
-
-M,err = find_transform(x,y)
-test = transform_pt(x[1],M)
-plt.plot(err)
     
 def transform_pt_array(point_array,M):
     """
@@ -397,6 +390,15 @@ def transform_pt_array(point_array,M):
     
     return tf_point_array
         
+
+x = np.array([[0,0],[0,1],[1,0],[1,1]])
+y = np.array([[1,1],[1,2],[2,1],[2,2]])  
+M_correct = np.array([[1,0,1],[0,1,1],[0,0,1]])
+
+M,err = find_transform(x,y)
+test = transform_pt(x[1],M)
+plt.plot(err)
+
 cam = np.load('im_coord_matching/cam_points.npy')
 world = np.load('im_coord_matching/world_points.npy')
 tf = find_transform(cam,world)
