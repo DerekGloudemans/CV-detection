@@ -352,11 +352,13 @@ def get_best_transform(x,y):
              bestComb = comb
     return bestM
 
+# test a simple translation
+if False:
+    x = np.array([[0,0],[0,1],[1,0],[1,1]])
+    y = np.array([[1,1],[1,2],[2,1],[2,2]])  
+    M_correct = np.array([[1,0,1],[0,1,1],[0,0,1]])
 
-x = np.array([[0,0],[0,1],[1,0],[1,1]])
-y = np.array([[1,1],[1,2],[2,1],[2,2]])  
-M_correct = np.array([[1,0,1],[0,1,1],[0,0,1]])
-
+# get transform for camera to world space
 cam = np.load('im_coord_matching/cam_points.npy')
 world = np.load('im_coord_matching/world_points.npy')
 M = get_best_transform(cam,world)
