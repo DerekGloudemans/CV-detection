@@ -419,8 +419,6 @@ def draw_track_world(point_array,tf_point_array,background_in,video_in,file_out 
             bottom_pad = frame_height-backg.shape[0]
             pad = cv2.copyMakeBorder(backg, 0 , bottom_pad, 0, 0, cv2.BORDER_CONSTANT, value=(0,0,0))
             # combine two images into a single image
-            print(pad.shape)
-            print(frame.shape)
             im_out = np.concatenate((frame,pad),axis = 1)
             
             #summary statistics

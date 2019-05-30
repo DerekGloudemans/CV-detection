@@ -16,14 +16,14 @@ from detector_utils import detect_video,\
 if __name__ == "__main__":
     
     
-    savenum = 1 # assign unique num to avoid overwriting as necessary
+    savenum = 2 # assign unique num to avoid overwriting as necessary
     
     # name in and out files
     video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
-    detect_file = 'detect{}.avi'.format(savenum) 
-    track_file = 'track{}.avi'.format(savenum)
-    world_file = 'world{}.avi'.format(savenum)
-    comb_file = 'comb{}.avi'.format(savenum)
+    detect_file = 'pipeline_files/detect{}.avi'.format(savenum) 
+    track_file = 'pipeline_files/track{}.avi'.format(savenum)
+    world_file = 'pipeline_files/world{}.avi'.format(savenum)
+    comb_file = 'pipeline_files/comb{}.avi'.format(savenum)
     background_file = 'im_coord_matching/vwd.png'
     show = True
     
@@ -51,18 +51,18 @@ if __name__ == "__main__":
       
     # get detections
     try:
-        detections = np.load("detections{}.npy".format(savenum),allow_pickle= True)
+        detections = np.load("pipeline_files/detections{}.npy".format(savenum),allow_pickle= True)
     except:
         detections = detect_video(video_file,net,show, save_file=detect_file)
-        np.save("detections{}.npy".format(savenum), detections)
+        np.save("pipeline_files/detections{}.npy".format(savenum), detections)
 
     # track objects and draw on video
     point_array, objs = extract_obj_coords(detections)
     draw_track(point_array,detect_file,track_file,show = True)
     
     # get transform for camera to world space and transform object points
-    cam_pts = np.load('im_coord_matching/cam_points.npy')
-    world_pts = np.load('im_coord_matching/world_points.npy')
+    cam_pts = np.load('im_coord_matching/cam_points2.npy')
+    world_pts = np.load('im_coord_matching/world_points2.npy')
     M = get_best_transform(cam_pts,world_pts)
     tf_points = transform_pt_array(point_array,M)
         
