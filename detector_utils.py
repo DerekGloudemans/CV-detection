@@ -26,19 +26,25 @@ def detect_video(video_file, detector, verbose = True, show = True, save_file = 
     frames = 0
     ret = True
     all_detections = []
+    
+    # get first frame
+    ret, frame = cap.read()
+    
     while cap.isOpened():
         
         if ret:
-            # read one frame
-            ret, frame = cap.read()
             
             # detect frame
             detections,im_out = detector.detect(frame, show = False, verbose = False)
             if True: # convert to numpy array
                 all_detections.append(detections.cpu().numpy())
+            
             #summary statistics
             frames += 1
             print("FPS of the video is {:5.2f}".format( frames / (time.time() - start)))
+            
+            # get next frame or None
+            ret, frame = cap.read()
             
              # save frame to file if necessary
             if save_file != None:
@@ -240,30 +246,40 @@ def draw_track(point_array, file_in, file_out = None, show = False):
         frame_height = int(cap.get(4))
         out = cv2.VideoWriter(file_out,cv2.CAP_FFMPEG,cv2.VideoWriter_fourcc('H','2','6','4'), 30, (frame_width,frame_height))
     
+    # define random colors for each object
+    colormaps = [(random.randrange(0,255),random.randrange(0,255), random.randrange(0,255)) for k in range(0,int(len(point_array[0])/2))]
+    
     ret = True
     start = time.time()
     frame_num = 0
     
+    # read first frame
+    ret, frame = cap.read()
+    
     while cap.isOpened():
         
         if ret:
-            # read one frame
-            ret, frame = cap.read()
             
-            # define random colors for each object
-            colormaps = [(random.randrange(0,255),random.randrange(0,255), random.randrange(0,255)) for k in range(0,int(len(point_array[0])/2))]
-    
+            # Plot circles
             for i in range(0, int(len(point_array[0])/2)):
                 try:
                     center = (int(point_array[frame_num,i*2]),int(point_array[frame_num,(i*2)+1]))
-                    cv2.circle(frame,center, 10, colormaps[i%len(colormaps)], thickness = -1)
+                    
+                    cv2.circle(frame,center, 10, colormaps[i], thickness = -1)
                 except:
                     pass # last frame is perhaps not done correctly
             im_out = frame #write here
             
-             # save frame to file if necessary
+            #summary statistics
+            frame_num = frame_num + 1
+            print("FPS of the video is {:5.2f}".format( frame_num / (time.time() - start)))
+            
+            # save frame to file if necessary
             if file_out != None:
                 out.write(im_out)
+            
+            # get next frame or None
+            ret, frame = cap.read()
             
             # output frame
             if show:
@@ -274,12 +290,9 @@ def draw_track(point_array, file_in, file_out = None, show = False):
                     break
                 continue
                 
-            #summary statistics
-            frame_num += 1
-            print("FPS of the video is {:5.2f}".format( frame_num / (time.time() - start)))
-            
         else:
             break
+        
     # close all resources used      
     cap.release()
     cv2.destroyAllWindows()
@@ -325,6 +338,10 @@ def draw_world(point_array, file_in, file_out = None, show = True):
                 except:
                     pass # last frame is perhaps not done correctly, may also catch points that fall off image boundary
             
+            #summary statistics
+            frame_num += 1
+            print("FPS of the video is {:5.2f}".format( frame_num / (time.time() - start)))
+            
              # save frame to file if necessary
             if file_out != None:
                 out.write(frame)
@@ -336,11 +353,9 @@ def draw_world(point_array, file_in, file_out = None, show = True):
                 key = cv2.waitKey(1)
                 if key & 0xFF == ord('q'):
                     break
-                #continue
+                continue
                 
-            #summary statistics
-            frame_num += 1
-            print("FPS of the video is {:5.2f}".format( frame_num / (time.time() - start)))
+            
         
     # close all resources used      
     cv2.destroyAllWindows()
@@ -375,11 +390,13 @@ def draw_track_world(point_array,tf_point_array,background_in,video_in,file_out 
     start = time.time()
     frame_num = 0
     
+    # get first frame
+    ret, frame = cap.read()
+    
     while cap.isOpened():
         
         if ret:
-            # read one frame
-            ret, frame = cap.read()
+            # get background image
             backg = world_im.copy()
             
             for i in range(0, int(len(point_array[0])/2)):
@@ -405,7 +422,14 @@ def draw_track_world(point_array,tf_point_array,background_in,video_in,file_out 
             print(pad.shape)
             print(frame.shape)
             im_out = np.concatenate((frame,pad),axis = 1)
-
+            
+            #summary statistics
+            frame_num += 1
+            print("FPS of the video is {:5.2f}".format( frame_num / (time.time() - start)))
+            
+            # get next frame or None
+            ret, frame = cap.read()
+            
             # save frame to file if necessary
             if file_out != None:
                 out.write(im_out)
@@ -421,13 +445,10 @@ def draw_track_world(point_array,tf_point_array,background_in,video_in,file_out 
                 if key & 0xFF == ord('q'):
                     break
                 continue
-                
-            #summary statistics
-            frame_num += 1
-            print("FPS of the video is {:5.2f}".format( frame_num / (time.time() - start)))
-            
+        
         else:
             break
+        
     # close all resources used      
     cap.release()
     cv2.destroyAllWindows()
