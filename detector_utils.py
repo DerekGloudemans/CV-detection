@@ -71,19 +71,29 @@ def detect_video(video_file, detector, verbose = True, show = True, save_file = 
     print("Detection finished")
     return all_detections
 
-def condense_detections(detections):
+def condense_detections(detections,pt_location = "center"):
     """
-    input - list of Dx8 numpy arrays correspoding to detections
+    input - list of Dx8 numpy arrays corresponding to detections
+    pt_location - specifies where the point will be placed in the original bounding box
     idx (always 0 in this imp.), 4 corner coordinates, objectness , score of class with max conf,class idx.
     output - list of D x 2 numpy arrays with x,y center coordinates
     """
     new_list = []
-    for item in detections:
-        coords = np.zeros([len(item),2])
-        for i in range(0,len(item)):
-            coords[i,0] = (item[i,1]+item[i,3])/2.0
-            coords[i,1] = (item[i,2]+item[i,4])/2.0
-        new_list.append(coords)            
+    if pt_location == "center":
+        for item in detections:
+            coords = np.zeros([len(item),2])
+            for i in range(0,len(item)):
+                coords[i,0] = (item[i,1]+item[i,3])/2.0
+                coords[i,1] = (item[i,2]+item[i,4])/2.0
+            new_list.append(coords)    
+    elif pt_location == "bottom_center":   
+        for item in detections:
+            coords = np.zeros([len(item),2])
+            for i in range(0,len(item)):
+                coords[i,0] = (item[i,1]+item[i,3])/2.0
+                coords[i,1] = item[i,4]
+            new_list.append(coords)          
+            
     return new_list
 
 def match_greedy(first,second,threshold = 10):
@@ -218,8 +228,8 @@ def get_objects(matchings, coords,snap_threshold = 30, frames_lost_lim = 20):
             
     return active_objs + inactive_objs
 
-def extract_obj_coords(detections):
-    coords = condense_detections(detections)
+def extract_obj_coords(detections,pt_location = "center"):
+    coords = condense_detections(detections,pt_location)
     matchings = match_all(coords)   
     objs = get_objects(matchings, coords)
 

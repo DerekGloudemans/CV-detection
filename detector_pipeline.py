@@ -16,7 +16,7 @@ from detector_utils import detect_video,\
 if __name__ == "__main__":
     
     
-    savenum = 7 # assign unique num to avoid overwriting as necessary
+    savenum = 9 # assign unique num to avoid overwriting as necessary
     
     # name in and out files
     video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
