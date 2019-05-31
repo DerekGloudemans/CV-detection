@@ -16,7 +16,7 @@ from detector_utils import detect_video,\
 if __name__ == "__main__":
     
     
-    savenum = 9 # assign unique num to avoid overwriting as necessary
+    savenum = 2 # assign unique num to avoid overwriting as necessary
     
     # name in and out files
     video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
@@ -67,4 +67,4 @@ if __name__ == "__main__":
     tf_points = transform_pt_array(point_array,M)
         
     # plot together
-    draw_track_world(point_array,tf_points,background_file,detect_file,comb_file,show = True)
+    draw_track_world(point_array,tf_points,background_file,detect_file,comb_file,show = True,trail_size = 50)

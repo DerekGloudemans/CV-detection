@@ -244,7 +244,7 @@ def extract_obj_coords(detections,pt_location = "center"):
             
     return points_array, objs
 
-def draw_track(point_array, file_in, file_out = None, show = False): 
+def draw_track(point_array, file_in, file_out = None, show = False, trail_size = 100): 
     # load video file 
     cap = cv2.VideoCapture(file_in)
     assert cap.isOpened(), "Cannot open file \"{}\"".format(file_in)
@@ -274,8 +274,12 @@ def draw_track(point_array, file_in, file_out = None, show = False):
             for i in range(0, int(len(point_array[0])/2)):
                 try:
                     center = (int(point_array[frame_num,i*2]),int(point_array[frame_num,(i*2)+1]))
-                    
                     cv2.circle(frame,center, 10, colormaps[i], thickness = -1)
+                    
+                    for j in range(1,trail_size+1):
+                        if frame_num - j >= 0:
+                            center = (int(point_array[frame_num-j,i*2]),int(point_array[frame_num-j,(i*2)+1]))
+                            cv2.circle(frame,center, int(10*0.99**j), colormaps[i], thickness = -1)
                 except:
                     pass # last frame is perhaps not done correctly
             im_out = frame #write here
@@ -375,7 +379,7 @@ def draw_world(point_array, file_in, file_out = None, show = True):
         pass
 
 
-def draw_track_world(point_array,tf_point_array,background_in,video_in,file_out = None, show = True):    
+def draw_track_world(point_array,tf_point_array,background_in,video_in,file_out = None, show = True,trail_size = 100):    
     """
     combines draw_track and draw_world into a single output video
     """
@@ -414,6 +418,12 @@ def draw_track_world(point_array,tf_point_array,background_in,video_in,file_out 
                 try:
                     center = (int(point_array[frame_num,i*2]),int(point_array[frame_num,(i*2)+1]))
                     cv2.circle(frame,center, 10, colormaps[i], thickness = -1)
+                    
+                    for j in range(1,trail_size+1):
+                        if frame_num - j >= 0:
+                            center = (int(point_array[frame_num-j,i*2]),int(point_array[frame_num-j,(i*2)+1]))
+                            cv2.circle(frame,center, int(10*0.99**j), colormaps[i], thickness = -1)
+                    
                 except:
                     pass # last frame is perhaps not done correctly
                     
@@ -421,6 +431,12 @@ def draw_track_world(point_array,tf_point_array,background_in,video_in,file_out 
                 try:
                     center = (int(tf_point_array[frame_num,i*2]),int(tf_point_array[frame_num,(i*2)+1]))
                     cv2.circle(backg,center, 10, colormaps[i], thickness = -1)
+                    
+                    for j in range(1,trail_size+1):
+                        if frame_num - j >= 0:
+                            center = (int(tf_point_array[frame_num-j,i*2]),int(tf_point_array[frame_num-j,(i*2)+1]))
+                            cv2.circle(backg,center, int(10*0.99**j), colormaps[i], thickness = -1)
+                    
                 except:
                     pass # last frame is perhaps not done correctly, may also catch points that fall off image boundary
             
