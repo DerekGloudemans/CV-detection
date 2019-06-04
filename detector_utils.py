@@ -572,5 +572,58 @@ def get_best_transform(x,y):
              bestComb = comb
     return bestM
 
+def velocities_from_pts(point_array,in_coords,out_coords, dt = 1/30.0):
+    '''
+    point_array - a num_frames x (2*num_objects) array where each row 
+    corresponds to a frame and each 2 columns to an object
+    in_coords - coordinates from camera space
+    out_coords - coordinates in real world feet space
+    dt - time between frames
+    vel_array - a num_frames-1 x num objects array where each row corresponds
+    to the speed of objects between two frames and each column to an object
+    '''
+    
+    # Convert to world_feet_space
+    cam_pts = np.load(in_coords)
+    world_feet_pts = np.load(out_coords)
+    
+    # transform points
+    M = get_best_transform(cam_pts,world_feet_pts)
+    tf_points = transform_pt_array(point_array,M)
+    
+    # initialize velocity array
+    vel_array = np.zeros([np.size(tf_points,0)-1,int(np.size(tf_points,1)/2)])
+    
+    # i iterates rows/frames, j iterates columns/objects
+    for i in range(0,len(vel_array)):
+        for j in range(0,len(vel_array[0])):
+            #calculate speed for entry i,j
+            dx = tf_points[i+1,j*2]-tf_points[i,j*2]
+            dy = tf_points[i+1,j*2]-tf_points[i,j*2]
+            dist = np.sqrt(dx**2 + dy**2)
+            vel_array[i,j] = dist / dt
+            
+    return vel_array
 
 
+def plot_velocities(vel_array,dt):
+    fps2mph =  0.681818
+    
+    plt.figure()
+    plt.xlabel('time(s)')
+    plt.ylabel('speed(mph)')
+    plt.ylim([0,60])
+    times = [t*dt for t in range(0,len(vel_array))]
+    for col in range(0,len(vel_array[0])):
+        obj_vels = vel_array[:,col]*fps2mph
+        
+        # smooth by convolving hamming window
+        width = 21
+        hamming = np.hamming(width)
+        # smooth and normalize
+        smooth = np.convolve(obj_vels,hamming)/sum(hamming)
+        # remove edges resulting from convolution
+        smooth = smooth[width//2:-width//2+1]
+        
+        # plot
+        plt.plot(times,smooth)
