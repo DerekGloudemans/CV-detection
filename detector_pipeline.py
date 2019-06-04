@@ -16,10 +16,11 @@ from detector_utils import detect_video,\
 if __name__ == "__main__":
     
     
-    savenum = 2 # assign unique num to avoid overwriting as necessary
+    savenum = 3 # assign unique num to avoid overwriting as necessary
     
     # name in and out files
     video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
+    video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/axis-ACCC8EB0662C/20190510/08/20190510_084109_D60B_ACCC8EB0662C/20190510_09/20190510_090616_25CE.mkv'
     detect_file = 'pipeline_files/detect{}.avi'.format(savenum) 
     track_file = 'pipeline_files/track{}.avi'.format(savenum)
     world_file = 'pipeline_files/world{}.avi'.format(savenum)

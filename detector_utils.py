@@ -1,11 +1,13 @@
 from __future__ import division
 from itertools import combinations
+from scipy.optimize import linear_sum_assignment
 import time
 import torch
 import numpy as np
 import cv2 
 import matplotlib.pyplot as plt
 import random
+
 
 def detect_video(video_file, detector, verbose = True, show = True, save_file = None):
     
@@ -122,6 +124,24 @@ def match_greedy(first,second,threshold = 10):
         dist[min_f,:] = np.inf
         
     return matchings
+
+def match_hungarian(first,second):
+    """
+    performs  optimal (in terms of sum distance) matching of points 
+    in first to second using the Hungarian algorithm
+    inputs - N x 2 arrays of object x and y coordinates from different frames
+    output - M x 1 array where index i corresponds to the second frame object 
+    matched to the first frame object i
+    """
+    # find distances between first and second
+    dist = np.zeros([len(first),len(second)])
+    for i in range(0,len(first)):
+        for j in range(0,len(second)):
+            dist[i,j] = np.sqrt((first[i,0]-second[j,0])**2 + (first[i,1]-second[j,1])**2)
+            
+    _, matchings = linear_sum_assignment(dist)
+    return matchings
+
 
 def match_all(coords_list,match_fn = match_greedy):
     """
