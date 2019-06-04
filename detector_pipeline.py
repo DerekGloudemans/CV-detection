@@ -10,20 +10,23 @@ from detector_utils import detect_video,\
                            get_best_transform,\
                            transform_pt_array,\
                            draw_world,\
-                           draw_track_world
+                           draw_track_world,\
+                           velocities_from_pts,\
+                           plot_velocities
 
   
 if __name__ == "__main__":
     
     
-    savenum = 1 # assign unique num to avoid overwriting as necessary
+    savenum = 5 # assign unique num to avoid overwriting as necessary
     
     # name in and out files
     video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
-    detect_file = 'detect{}.avi'.format(savenum) 
-    track_file = 'track{}.avi'.format(savenum)
-    world_file = 'world{}.avi'.format(savenum)
-    comb_file = 'comb{}.avi'.format(savenum)
+    #video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/axis-ACCC8EB0662C/20190510/08/20190510_084109_D60B_ACCC8EB0662C/20190510_09/20190510_090616_25CE.mkv'
+    detect_file = 'pipeline_files/detect{}.avi'.format(savenum) 
+    track_file = 'pipeline_files/track{}.avi'.format(savenum)
+    world_file = 'pipeline_files/world{}.avi'.format(savenum)
+    comb_file = 'pipeline_files/comb{}.avi'.format(savenum)
     background_file = 'im_coord_matching/vwd.png'
     show = True
     
@@ -51,20 +54,23 @@ if __name__ == "__main__":
       
     # get detections
     try:
-        detections = np.load("detections{}.npy".format(savenum),allow_pickle= True)
+        detections = np.load("pipeline_files/detections{}.npy".format(savenum),allow_pickle= True)
     except:
         detections = detect_video(video_file,net,show, save_file=detect_file)
-        np.save("detections{}.npy".format(savenum), detections)
+        np.save("pipeline_files/detections{}.npy".format(savenum), detections)
 
     # track objects and draw on video
     point_array, objs = extract_obj_coords(detections)
-    draw_track(point_array,detect_file,track_file,show = True)
+    #draw_track(point_array,detect_file,track_file,show = True)
     
     # get transform for camera to world space and transform object points
-    cam_pts = np.load('im_coord_matching/cam_points.npy')
-    world_pts = np.load('im_coord_matching/world_points.npy')
+    cam_pts = np.load('im_coord_matching/cam_points2.npy')
+    world_pts = np.load('im_coord_matching/world_points2.npy')
     M = get_best_transform(cam_pts,world_pts)
     tf_points = transform_pt_array(point_array,M)
         
     # plot together
-    draw_track_world(point_array,tf_points,background_file,detect_file,comb_file,show = True)
+    draw_track_world(point_array,tf_points,background_file,detect_file,comb_file,show = True,trail_size = 50)
+    
+    vel_array = velocities_from_pts(point_array,'im_coord_matching/cam_points2.npy','im_coord_matching/world_feet_points.npy')
+    plot_velocities(vel_array,1/30.0)

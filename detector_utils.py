@@ -1,11 +1,13 @@
 from __future__ import division
 from itertools import combinations
+from scipy.optimize import linear_sum_assignment
 import time
 import torch
 import numpy as np
 import cv2 
 import matplotlib.pyplot as plt
 import random
+
 
 def detect_video(video_file, detector, verbose = True, show = True, save_file = None):
     
@@ -71,19 +73,29 @@ def detect_video(video_file, detector, verbose = True, show = True, save_file = 
     print("Detection finished")
     return all_detections
 
-def condense_detections(detections):
+def condense_detections(detections,pt_location = "center"):
     """
-    input - list of Dx8 numpy arrays correspoding to detections
+    input - list of Dx8 numpy arrays corresponding to detections
+    pt_location - specifies where the point will be placed in the original bounding box
     idx (always 0 in this imp.), 4 corner coordinates, objectness , score of class with max conf,class idx.
     output - list of D x 2 numpy arrays with x,y center coordinates
     """
     new_list = []
-    for item in detections:
-        coords = np.zeros([len(item),2])
-        for i in range(0,len(item)):
-            coords[i,0] = (item[i,1]+item[i,3])/2.0
-            coords[i,1] = (item[i,2]+item[i,4])/2.0
-        new_list.append(coords)            
+    if pt_location == "center":
+        for item in detections:
+            coords = np.zeros([len(item),2])
+            for i in range(0,len(item)):
+                coords[i,0] = (item[i,1]+item[i,3])/2.0
+                coords[i,1] = (item[i,2]+item[i,4])/2.0
+            new_list.append(coords)    
+    elif pt_location == "bottom_center":   
+        for item in detections:
+            coords = np.zeros([len(item),2])
+            for i in range(0,len(item)):
+                coords[i,0] = (item[i,1]+item[i,3])/2.0
+                coords[i,1] = item[i,4]
+            new_list.append(coords)          
+            
     return new_list
 
 def match_greedy(first,second,threshold = 10):
@@ -112,6 +124,24 @@ def match_greedy(first,second,threshold = 10):
         dist[min_f,:] = np.inf
         
     return matchings
+
+def match_hungarian(first,second):
+    """
+    performs  optimal (in terms of sum distance) matching of points 
+    in first to second using the Hungarian algorithm
+    inputs - N x 2 arrays of object x and y coordinates from different frames
+    output - M x 1 array where index i corresponds to the second frame object 
+    matched to the first frame object i
+    """
+    # find distances between first and second
+    dist = np.zeros([len(first),len(second)])
+    for i in range(0,len(first)):
+        for j in range(0,len(second)):
+            dist[i,j] = np.sqrt((first[i,0]-second[j,0])**2 + (first[i,1]-second[j,1])**2)
+            
+    _, matchings = linear_sum_assignment(dist)
+    return matchings
+
 
 def match_all(coords_list,match_fn = match_greedy):
     """
@@ -218,8 +248,8 @@ def get_objects(matchings, coords,snap_threshold = 30, frames_lost_lim = 20):
             
     return active_objs + inactive_objs
 
-def extract_obj_coords(detections):
-    coords = condense_detections(detections)
+def extract_obj_coords(detections,pt_location = "center"):
+    coords = condense_detections(detections,pt_location)
     matchings = match_all(coords)   
     objs = get_objects(matchings, coords)
 
@@ -234,7 +264,7 @@ def extract_obj_coords(detections):
             
     return points_array, objs
 
-def draw_track(point_array, file_in, file_out = None, show = False): 
+def draw_track(point_array, file_in, file_out = None, show = False, trail_size = 100): 
     # load video file 
     cap = cv2.VideoCapture(file_in)
     assert cap.isOpened(), "Cannot open file \"{}\"".format(file_in)
@@ -264,8 +294,12 @@ def draw_track(point_array, file_in, file_out = None, show = False):
             for i in range(0, int(len(point_array[0])/2)):
                 try:
                     center = (int(point_array[frame_num,i*2]),int(point_array[frame_num,(i*2)+1]))
-                    
                     cv2.circle(frame,center, 10, colormaps[i], thickness = -1)
+                    
+                    for j in range(1,trail_size+1):
+                        if frame_num - j >= 0:
+                            center = (int(point_array[frame_num-j,i*2]),int(point_array[frame_num-j,(i*2)+1]))
+                            cv2.circle(frame,center, int(10*0.99**j), colormaps[i], thickness = -1)
                 except:
                     pass # last frame is perhaps not done correctly
             im_out = frame #write here
@@ -365,7 +399,7 @@ def draw_world(point_array, file_in, file_out = None, show = True):
         pass
 
 
-def draw_track_world(point_array,tf_point_array,background_in,video_in,file_out = None, show = True):    
+def draw_track_world(point_array,tf_point_array,background_in,video_in,file_out = None, show = True,trail_size = 100):    
     """
     combines draw_track and draw_world into a single output video
     """
@@ -404,6 +438,12 @@ def draw_track_world(point_array,tf_point_array,background_in,video_in,file_out 
                 try:
                     center = (int(point_array[frame_num,i*2]),int(point_array[frame_num,(i*2)+1]))
                     cv2.circle(frame,center, 10, colormaps[i], thickness = -1)
+                    
+                    for j in range(1,trail_size+1):
+                        if frame_num - j >= 0:
+                            center = (int(point_array[frame_num-j,i*2]),int(point_array[frame_num-j,(i*2)+1]))
+                            cv2.circle(frame,center, int(10*0.99**j), colormaps[i], thickness = -1)
+                    
                 except:
                     pass # last frame is perhaps not done correctly
                     
@@ -411,6 +451,12 @@ def draw_track_world(point_array,tf_point_array,background_in,video_in,file_out 
                 try:
                     center = (int(tf_point_array[frame_num,i*2]),int(tf_point_array[frame_num,(i*2)+1]))
                     cv2.circle(backg,center, 10, colormaps[i], thickness = -1)
+                    
+                    for j in range(1,trail_size+1):
+                        if frame_num - j >= 0:
+                            center = (int(tf_point_array[frame_num-j,i*2]),int(tf_point_array[frame_num-j,(i*2)+1]))
+                            cv2.circle(backg,center, int(10*0.99**j), colormaps[i], thickness = -1)
+                    
                 except:
                     pass # last frame is perhaps not done correctly, may also catch points that fall off image boundary
             
@@ -419,8 +465,6 @@ def draw_track_world(point_array,tf_point_array,background_in,video_in,file_out 
             bottom_pad = frame_height-backg.shape[0]
             pad = cv2.copyMakeBorder(backg, 0 , bottom_pad, 0, 0, cv2.BORDER_CONSTANT, value=(0,0,0))
             # combine two images into a single image
-            print(pad.shape)
-            print(frame.shape)
             im_out = np.concatenate((frame,pad),axis = 1)
             
             #summary statistics
@@ -528,5 +572,58 @@ def get_best_transform(x,y):
              bestComb = comb
     return bestM
 
+def velocities_from_pts(point_array,in_coords,out_coords, dt = 1/30.0):
+    '''
+    point_array - a num_frames x (2*num_objects) array where each row 
+    corresponds to a frame and each 2 columns to an object
+    in_coords - coordinates from camera space
+    out_coords - coordinates in real world feet space
+    dt - time between frames
+    vel_array - a num_frames-1 x num objects array where each row corresponds
+    to the speed of objects between two frames and each column to an object
+    '''
+    
+    # Convert to world_feet_space
+    cam_pts = np.load(in_coords)
+    world_feet_pts = np.load(out_coords)
+    
+    # transform points
+    M = get_best_transform(cam_pts,world_feet_pts)
+    tf_points = transform_pt_array(point_array,M)
+    
+    # initialize velocity array
+    vel_array = np.zeros([np.size(tf_points,0)-1,int(np.size(tf_points,1)/2)])
+    
+    # i iterates rows/frames, j iterates columns/objects
+    for i in range(0,len(vel_array)):
+        for j in range(0,len(vel_array[0])):
+            #calculate speed for entry i,j
+            dx = tf_points[i+1,j*2]-tf_points[i,j*2]
+            dy = tf_points[i+1,j*2]-tf_points[i,j*2]
+            dist = np.sqrt(dx**2 + dy**2)
+            vel_array[i,j] = dist / dt
+            
+    return vel_array
 
 
+def plot_velocities(vel_array,dt):
+    fps2mph =  0.681818
+    
+    plt.figure()
+    plt.xlabel('time(s)')
+    plt.ylabel('speed(mph)')
+    plt.ylim([0,60])
+    times = [t*dt for t in range(0,len(vel_array))]
+    for col in range(0,len(vel_array[0])):
+        obj_vels = vel_array[:,col]*fps2mph
+        
+        # smooth by convolving hamming window
+        width = 21
+        hamming = np.hamming(width)
+        # smooth and normalize
+        smooth = np.convolve(obj_vels,hamming)/sum(hamming)
+        # remove edges resulting from convolution
+        smooth = smooth[width//2:-width//2+1]
+        
+        # plot
+        plt.plot(times,smooth)
