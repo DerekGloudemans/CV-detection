@@ -77,9 +77,10 @@ if False:
     
  ###########################################################################   
 # n = 10 state size example
-sampling_error = 1
+ 
+sampling_error = 100
 model_err = 1
-meas_err= 0.1
+meas_err= 100
 t = 1/30.   # discrete time step 
  
 x = np.zeros([10,1])          # intialize state
@@ -98,7 +99,7 @@ P = np.zeros([10,10])              # initialize state error covariance matrix
 
 
 #generate data
-time = [i/20.0 for i in range(0,100)]
+time = [i/30.0 for i in range(0,1000)]
 y_pos = [14*i * 10.5 + random.gauss(0,2) for i in time]
 x_pos = [(10*i**2 * 5.5 + i) + random.gauss(0,1) for i in time]
 scale = [100/(2*i+1) for i in time]
@@ -163,26 +164,34 @@ def plot_rectangles(im,x_pos,y_pos,scale,ratio,time,plot_pos = 0):
     return im
 
 
+if False:
+    # plot rectangles
+    height = 1000
+    width = 2000
+    im = np.zeros((height,width,3), np.uint8)+255
+    
+    
+    im = plot_rectangles(im,x_pos[:-1],y_pos[:-1],scale[:-1],ratio[:-1],time[:-1],plot_pos = 0)
+    im = plot_rectangles(im,meas_x,meas_y,meas_scale,meas_ratio,time[:-1],plot_pos = 1)
+    im = plot_rectangles(im,kal_x,kal_y,kal_scale,kal_ratio,time[:-1],plot_pos = 2)
+    
+    
+    cv2.imshow('frame',im)
+    while 1:
+        key = cv2.waitKey(1)
+        if key & 0xFF == ord('q'):
+            break
+    
+    cv2.destroyAllWindows()
 
-# plot rectangles
-height = 1000
-width = 2000
-im = np.zeros((height,width,3), np.uint8)+255
-
-
-im = plot_rectangles(im,x_pos[:-1],y_pos[:-1],scale[:-1],ratio[:-1],time[:-1],plot_pos = 0)
-im = plot_rectangles(im,meas_x,meas_y,meas_scale,meas_ratio,time[:-1],plot_pos = 1)
-im = plot_rectangles(im,kal_x,kal_y,kal_scale,kal_ratio,time[:-1],plot_pos = 2)
-
-
-cv2.imshow('frame',im)
-while 1:
-    key = cv2.waitKey(1)
-    if key & 0xFF == ord('q'):
-        break
-
-cv2.destroyAllWindows()
-
+plt.figure()
+plt.plot(x_pos,y_pos)
+plt.plot(meas_x,meas_y,'.')
+plt.plot(kal_x,kal_y)
+plt.xlabel("X position")
+plt.ylabel("Y position")
+plt.title("4D Kalman filtering Example")
+plt.legend(["Ground Truth", "Measurements", "Kalman Filter"])
 
 
 #Observability test
