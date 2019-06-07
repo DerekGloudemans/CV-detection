@@ -7,7 +7,7 @@ import numpy as np
 import cv2 
 import matplotlib.pyplot as plt
 import random
-
+from filterpy.kalman import KalmanFilter
 
 def condense_detections(detections,style = "center"):
     """
@@ -79,10 +79,7 @@ def match_greedy(first,second,threshold = 10):
     output - M x 1 array where index i corresponds to the second frame object 
     matched to the first frame object i
     """
-    
 
-
-    
     # find distances between first and second
     dist = np.zeros([len(first),len(second)])
     for i in range(0,len(first)):
@@ -227,7 +224,7 @@ def get_objects(matchings, coords,snap_threshold = 30, frames_lost_lim = 20):
     return active_objs + inactive_objs
 
 
-def extract_obj_coords(detections,pt_location = "center"):
+def extract_obj_coords(detections,style = "center"):
     """ 
     wrapper function that condenses, matches, and extracts objects from a set
     of detections. pt_location = "center" or "bottom_center" and specifies
@@ -235,7 +232,7 @@ def extract_obj_coords(detections,pt_location = "center"):
     returns point_array - a t x 2N array where t is the number of frames and N
     is the total number of unique objects detected in the video
     """
-    coords = condense_detections(detections,pt_location)
+    coords = condense_detections(detections,style)
     matchings = match_all(coords)   
     objs = get_objects(matchings, coords)
 
@@ -249,6 +246,79 @@ def extract_obj_coords(detections,pt_location = "center"):
             points_array[i+first_frame,(j*2)+1] = obj['all'][i][1]\
             
     return points_array, objs
+
+class kf_object(self):
+    """
+    A wrapper class that stores a Kalman filter for tracking the object as well
+    as some other parameters, variables and all object positions
+    """
+    def __init__(self, xysr,obj_id,frame_num,mod_err,meas_err,state_err):
+        self.first_frame = first_frame # first frame in which object is detected
+        self.fsld = 0 # frames since last detected
+        self.all = [] # all positions of object across frames
+        self.obj_id = obj_id # position in coords list
+        t = 1/30.0
+        
+        # intialize state (generally x but called state to avoid confusion here)
+        self.state = np.zeros([10,1])
+        self.state[0,0] = xysr[0]
+        self.state[3,0] = xysr[1]
+        self.state[6,0] = xysr[2]
+        self.state[8,0] = xysr[3]
+        
+        # initialize Kalman Filter to track object
+        self.kf = KalmanFilter(dim_x = 10, dim_z = 4)
+        self.kf.x = self.state # state
+        self.kf.P *= state_err # state error covariance matrix
+        self.kf.Q = np.identity(10)*mod_err # model error covariance matrix
+        self.kf.R = np.identity(4)* meas_err # measurement error covariance matrix
+        
+        F = np.identity(10) # state transition matrix
+        for i in range(len(F)-1):
+            F[i,i+1] = t
+        self.kf.F = F
+        
+        H = np.zeros([4,10]) # initialize measurement transition matrix
+        H[[0,1,2,3],[0,3,6,8]] = 1
+        self.kf.H = H 
+        
+    def predict(self):
+        self.kf.predict()
+    
+    def update(self,measurement):
+        self.kf.update()
+    
+    def get_x(self):
+        """
+        returns current state, so will return a priori state estimate if 
+        called after predict, or a posteriori estimate if called after update
+        """
+        return self.kf.x
+
+    
+def track_SORT(detections):    
+    """
+    Uses the SORT algorithm for object tracking. 
+    detections - A list of D x 4 numpy arrays with x centroid, y centroid, scale, ratio
+    for each object in a frame
+    
+    objs - 
+    """
+
+    active_objs = []
+    inactive_objs = []
+    
+    # initialize with all objects found in first frame
+    for i,row in enumerate(coords[0]):
+        obj = {
+                'current': (row[0],row[1]),
+                'all': [], # keeps track of all positions of the object
+                'obj_id': i, # position in coords list
+                'fsld': 0,   # frames since last detected
+                'first_frame': 0 # frame in which object is first detected
+                }
+        obj['all'].append(obj['current']) 
+        active_objs.append(obj)
 
 
 # Kalman filter validation code
