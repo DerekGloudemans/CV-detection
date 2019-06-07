@@ -10,6 +10,12 @@ import random
 
 
 def detect_video(video_file, detector, verbose = True, show = True, save_file = None):
+    """
+    frame by frame object detection of video_file using specified detector
+    object as the detector (must have a detect function)
+    if save_file is specified, writes annotated video to this file
+    returns all_detections - list of Dx8 numpy arrays, one row for each object 
+    """
     
     # open up a videocapture object
     cap = cv2.VideoCapture(video_file)
@@ -249,6 +255,13 @@ def get_objects(matchings, coords,snap_threshold = 30, frames_lost_lim = 20):
     return active_objs + inactive_objs
 
 def extract_obj_coords(detections,pt_location = "center"):
+    """ 
+    wrapper function that condenses, matches, and extracts objects from a set
+    of detections. pt_location = "center" or "bottom_center" and specifies
+    where the object point should be placed
+    returns point_array - a t x 2N array where t is the number of frames and N
+    is the total number of unique objects detected in the video
+    """
     coords = condense_detections(detections,pt_location)
     matchings = match_all(coords)   
     objs = get_objects(matchings, coords)
@@ -265,6 +278,9 @@ def extract_obj_coords(detections,pt_location = "center"):
     return points_array, objs
 
 def draw_track(point_array, file_in, file_out = None, show = False, trail_size = 100): 
+    """
+    Plots point_array on the video_file used to create it
+    """
     # load video file 
     cap = cv2.VideoCapture(file_in)
     assert cap.isOpened(), "Cannot open file \"{}\"".format(file_in)
