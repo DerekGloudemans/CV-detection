@@ -247,13 +247,15 @@ def extract_obj_coords(detections,style = "center"):
             
     return points_array, objs
 
-class kf_object(self):
+class KF_Object():
     """
     A wrapper class that stores a Kalman filter for tracking the object as well
     as some other parameters, variables and all object positions
     """
     def __init__(self, xysr,obj_id,frame_num,mod_err,meas_err,state_err):
-        self.first_frame = first_frame # first frame in which object is detected
+        # use mod_err,meas_err, and state_err to tune filter
+        
+        self.first_frame = frame_num # first frame in which object is detected
         self.fsld = 0 # frames since last detected
         self.all = [] # all positions of object across frames
         self.obj_id = obj_id # position in coords list
@@ -294,33 +296,60 @@ class kf_object(self):
         called after predict, or a posteriori estimate if called after update
         """
         return self.kf.x
+    
+    def get_coords(self):
+        """
+        returns 1d numpy array of x,y,s,r
+        """
+        return self.kf.x[[0,3,6,8],0]
 
     
-def track_SORT(detections):    
+def track_SORT(coords_list):    
     """
     Uses the SORT algorithm for object tracking. 
     detections - A list of D x 4 numpy arrays with x centroid, y centroid, scale, ratio
     for each object in a frame
     
-    objs - 
+    objs - returned
     """
 
     active_objs = []
     inactive_objs = []
     
     # initialize with all objects found in first frame
-    for i,row in enumerate(coords[0]):
-        obj = {
-                'current': (row[0],row[1]),
-                'all': [], # keeps track of all positions of the object
-                'obj_id': i, # position in coords list
-                'fsld': 0,   # frames since last detected
-                'first_frame': 0 # frame in which object is first detected
-                }
-        obj['all'].append(obj['current']) 
+    for i,row in enumerate(coords_list[0]):
+        obj = KF_Object(row,i,0,1,1,100)
         active_objs.append(obj)
 
+    # loop through all frames
+    for frame_num in range(1,len(coords_list)):
+        
+        # predict new locations of all objects
+        # look at next set of detected objects
+        # match
+        # for all matches, update Kalman filter
+        # for all detached objects, update fsld and delete if too high
+        # for all unmatched objects, intialize new object
+        
+        # 1. predict new locations of all objects x_k | x_k-1
+        for obj in active_objs:
+            obj.predict()
+            
+        # 2. look at next set of detected objects
+        # convert into numpy array
+        locations = np.zeros([len(active_objs),4])
+        for i,obj in enumerate(active_objs):
+            locations[i,:] = obj.get_coords()
+        
+        # 3. match - these arrays are both N x 4 but last two columns will be ignored 
+        matches = match_hungarian(locations,coords_list[frame_num])
+        # remove matches with IOU below threshold (i.e. too far apart)
+        
+        # for all matches, update Kalman filter
+        # for all detached objects, update fsld and delete if too high
+        # for all unmatched objects, intialize new object
 
 # Kalman filter validation code
 detections = np.load("temp_detections.npy",allow_pickle= True)
 flattened = condense_detections(detections,style = "SORT")
+track_SORT(flattened)
