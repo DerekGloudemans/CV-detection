@@ -8,30 +8,69 @@ import cv2
 import matplotlib.pyplot as plt
 import random
 
-def condense_detections(detections,pt_location = "center"):
+
+def condense_detections(detections,style = "center"):
     """
-    input - list of Dx8 numpy arrays corresponding to detections
-    pt_location - specifies where the point will be placed in the original bounding box
-    idx (always 0 in this imp.), 4 corner coordinates, objectness , score of class with max conf,class idx.
-    output - list of D x 2 numpy arrays with x,y center coordinates
+    converts the input data object (from the yolo detector or similar) into the 
+    specified output style
+    
+    detections - input list of length equal to number of frames. Each list item is
+    a D x 8 numpy array with a row for each object containing:
+    index of the image in the batch (always 0 in this implementation 
+    4 corner coordinates (x1,y1,x2,y2), objectness score, the score of class 
+    with maximum confidence, and the index of that class.
+    
+    will return a list of D x ? numpy arrays with the contents of each row as 
+    specified by style parameter
+    
+    style "center" -  centroid x, centroid y
+    style "bottom_center" - centroid x, bottom y
+    style "SORT" - centroid x, centroid y, scale (height) and ratio (width/height)
+    style "SORT_with_conf" - as above plus detection confidence
     """
+    assert style in ["SORT_with_conf","SORT","center","bottom_center"], "Invalid style input."
+    
     new_list = []
-    if pt_location == "center":
+    
+    if style == "center":
         for item in detections:
             coords = np.zeros([len(item),2])
             for i in range(0,len(item)):
                 coords[i,0] = (item[i,1]+item[i,3])/2.0
                 coords[i,1] = (item[i,2]+item[i,4])/2.0
-            new_list.append(coords)    
-    elif pt_location == "bottom_center":   
+            new_list.append(coords) 
+            
+    elif style == "bottom_center":   
         for item in detections:
             coords = np.zeros([len(item),2])
             for i in range(0,len(item)):
                 coords[i,0] = (item[i,1]+item[i,3])/2.0
                 coords[i,1] = item[i,4]
-            new_list.append(coords)          
+            new_list.append(coords)
             
+    elif style == "SORT":
+        for item in detections:
+            coords = np.zeros([len(item),4])
+            for i in range(0,len(item)):
+                coords[i,0] = (item[i,1]+item[i,3])/2.0 # x centroid
+                coords[i,1] = (item[i,2]+item[i,4])/2.0 # y centroid
+                coords[i,2] = (item[i,4]-item[i,2]) # scale (y height)
+                coords[i,3] = (item[i,3]-item[i,1])/float(coords[i,2]) # ratio (width/height)
+            new_list.append(coords)
+            
+    elif style == "SORT_with_conf":
+        for item in detections:
+            coords = np.zeros([len(item),4])
+            for i in range(0,len(item)):
+                coords[i,0] = (item[i,1]+item[i,3])/2.0 # x centroid
+                coords[i,1] = (item[i,2]+item[i,4])/2.0 # y centroid
+                coords[i,2] = (item[i,4]-item[i,2]) # scale (y height)
+                coords[i,3] = (item[i,3]-item[i,1])/float(coords[i,2]) # ratio (width/height)
+                coords[i,4] = (item[i,5])
+            new_list.append(coords)
+       
     return new_list
+
 
 def match_greedy(first,second,threshold = 10):
     """
@@ -40,6 +79,8 @@ def match_greedy(first,second,threshold = 10):
     output - M x 1 array where index i corresponds to the second frame object 
     matched to the first frame object i
     """
+    
+
 
     
     # find distances between first and second
@@ -59,6 +100,7 @@ def match_greedy(first,second,threshold = 10):
         dist[min_f,:] = np.inf
         
     return matchings
+
 
 def match_hungarian(first,second):
     """
@@ -92,6 +134,7 @@ def match_all(coords_list,match_fn = match_greedy):
         second = coords_list[i+1]
         out_list.append(match_fn(first,second))
     return out_list
+
 
 def get_objects(matchings, coords,snap_threshold = 30, frames_lost_lim = 20):
     """
@@ -183,6 +226,7 @@ def get_objects(matchings, coords,snap_threshold = 30, frames_lost_lim = 20):
             
     return active_objs + inactive_objs
 
+
 def extract_obj_coords(detections,pt_location = "center"):
     """ 
     wrapper function that condenses, matches, and extracts objects from a set
@@ -205,3 +249,8 @@ def extract_obj_coords(detections,pt_location = "center"):
             points_array[i+first_frame,(j*2)+1] = obj['all'][i][1]\
             
     return points_array, objs
+
+
+# Kalman filter validation code
+detections = np.load("temp_detections.npy",allow_pickle= True)
+flattened = condense_detections(detections,style = "SORT")
