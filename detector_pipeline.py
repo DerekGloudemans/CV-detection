@@ -2,17 +2,16 @@ from __future__ import division
 import torch
 import numpy as np
 import cv2 
+
+# import detector
 from pytorch_yolo_v3.yolo_detector import Darknet_Detector
 
-from detector_utils import detect_video,\
-                           extract_obj_coords,\
-                           draw_track,\
-                           get_best_transform,\
-                           transform_pt_array,\
-                           draw_world,\
-                           draw_track_world,\
-                           velocities_from_pts,\
-                           plot_velocities
+# import utility functions
+from util_detect import detect_video
+from util_track import extract_obj_coords
+from util_transform import get_best_transform, transform_pt_array, velocities_from_pts, plot_velocities
+from util_draw import draw_world, draw_track, draw_track_world
+
 
   
 if __name__ == "__main__":
