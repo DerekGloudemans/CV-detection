@@ -100,7 +100,7 @@ def match_greedy(first,second,threshold = 10):
     return np.ndarray.astype(matchings,int)
 
 
-def match_hungarian(first,second,iou_cutoff = 0.5):
+def match_hungarian(first,second,iou_cutoff = 0.3):
     """
     performs  optimal (in terms of sum distance) matching of points 
     in first to second using the Hungarian algorithm
@@ -192,7 +192,7 @@ def get_objects(matchings, coords,snap_threshold = 30, frames_lost_lim = 20):
         matched_in_next = [] # keeps track of which objects from next frame are already dealt with
         
         # first, deal with all existing objects (each loop deals with one object)
-        # o is the objecobjs[4]t index
+        # o is the object index
         # obj is the object 
         for o, obj in enumerate(active_objs):
             matched = False
@@ -315,25 +315,36 @@ class KF_Object():
         # intialize state (generally x but called state to avoid confusion here)
         self.state = np.zeros([10,1])
         self.state[0,0] = xysr[0]
-        self.state[3,0] = xysr[1]
-        self.state[6,0] = xysr[2]
-        self.state[8,0] = xysr[3]
-        
-        # initialize Kalman Filter to track object
-        self.kf = KalmanFilter(dim_x = 10, dim_z = 4)
-        self.kf.x = self.state # state
-        self.kf.P *= state_err # state error covariance matrix
-        self.kf.Q = np.identity(10)*mod_err # model error covariance matrix
-        self.kf.R = np.identity(4)* meas_err # measurement error covariance matrix
+        self.state[1,0] = xysr[1]
+        self.state[2,0] = xysr[2]
+        self.state[3,0] = xysr[3]
         
         F = np.identity(10) # state transition matrix
-        for i in range(len(F)-1):
-            F[i,i+1] = t
-        self.kf.F = F
-        
+        for i in range(0,6):
+            F[i,i+4] = t
+            
         H = np.zeros([4,10]) # initialize measurement transition matrix
-        H[[0,1,2,3],[0,3,6,8]] = 1
-        self.kf.H = H 
+        H[[0,1,2,3],[0,1,2,3]] = 1
+        
+        second_order = True
+        if second_order == True:
+            # initialize Kalman Filter to track object
+            self.kf = KalmanFilter(dim_x = 10, dim_z = 4)
+            self.kf.x = self.state # state
+            self.kf.P *= state_err # state error covariance matrix
+            self.kf.Q = np.identity(10)*mod_err # model error covariance matrix
+            self.kf.R = np.identity(4)* meas_err # measurement error covariance matrix
+            self.kf.F = F
+            self.kf.H = H 
+        else:
+            # initialize Kalman Filter to track object
+            self.kf = KalmanFilter(dim_x = 7, dim_z = 4)
+            self.kf.x = self.state # state
+            self.kf.P *= state_err # state error covariance matrix
+            self.kf.Q = np.identity(7)*mod_err # model error covariance matrix
+            self.kf.R = np.identity(4)* meas_err # measurement error covariance matrix
+            self.kf.F = F[:7,:7]
+            self.kf.H = H[:,:7] 
         
     def predict(self):
         self.kf.predict()
@@ -352,10 +363,10 @@ class KF_Object():
         """
         returns 1d numpy array of x,y,s,r
         """
-        return self.kf.x[[0,3,6,8],0]
+        return self.kf.x[[0,1,2,3],0]
 
     
-def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 15):    
+def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 60):    
     """
     Uses the SORT algorithm for object tracking. 
     detections - A list of D x 4 numpy arrays with x centroid, y centroid, scale, ratio
