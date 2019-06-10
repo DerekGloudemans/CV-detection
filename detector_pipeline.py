@@ -7,7 +7,7 @@ import cv2
 from pytorch_yolo_v3.yolo_detector import Darknet_Detector
 
 # import utility functions
-from util_detect import detect_video
+from util_detect import detect_video, remove_duplicates
 from util_track import extract_obj_coords
 from util_transform import get_best_transform, transform_pt_array, velocities_from_pts, plot_velocities
 from util_draw import draw_world, draw_track, draw_track_world
@@ -16,7 +16,7 @@ from util_draw import draw_world, draw_track, draw_track_world
   
 if __name__ == "__main__":
     
-    savenum = 0 # assign unique num to avoid overwriting as necessary
+    savenum = 12 # assign unique num to avoid overwriting as necessary
     show = True
     
     # name in files
@@ -57,6 +57,7 @@ if __name__ == "__main__":
         detections = np.load("pipeline_files/detections{}.npy".format(savenum),allow_pickle= True)
     except:
         detections = detect_video(video_file,net,show, save_file=detect_file)
+        detections = remove_duplicates(detections)
         np.save("pipeline_files/detections{}.npy".format(savenum), detections)
 
     # track objects and draw on video

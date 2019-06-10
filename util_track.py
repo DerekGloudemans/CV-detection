@@ -113,7 +113,7 @@ def match_hungarian(first,second,iou_cutoff = 0.5):
         for j in range(0,len(second)):
             dist[i,j] = np.sqrt((first[i,0]-second[j,0])**2 + (first[i,1]-second[j,1])**2)
             
-    _, matchings = linear_sum_assignment(dist)
+    _, matchings = linear_sum_assignment(np.transpose(dist))
     
     # calculate intersection over union  (IOU) for all matches
     for i,j in enumerate(matchings):
@@ -179,7 +179,7 @@ def get_objects(matchings, coords,snap_threshold = 30, frames_lost_lim = 20):
     
     # for one set of matchings between frames - this loop will run (# frames -1) times
     # f is the frame number
-    # frame_set is the 1 x objects numopy array of matchings from frame f to frame f+1
+    # frame_set is the 1 x objects numpy array of matchings from frame f to frame f+1
     for f, frame_set in enumerate(matchings):
         move_to_inactive = []
         matched_in_next = [] # keeps track of which objects from next frame are already dealt with
@@ -360,22 +360,28 @@ def track_SORT(coords_list):
         for obj in active_objs:
             obj.predict()
             
-        # 2. look at next set of detected objects
-        # convert into numpy array
+        # 2. look at next set of detected objects - all objects are included in this even if detached
+        # convert into numpy array - where row i corresponds to object i in active_objs
         locations = np.zeros([len(active_objs),4])
         for i,obj in enumerate(active_objs):
             locations[i,:] = obj.get_coords()
         
         # 3. match - these arrays are both N x 4 but last two columns will be ignored 
-        matches = match_hungarian(locations,coords_list[frame_num])
-        matches2 = match_greedy(locations,coords_list[frame_num],threshold = 40)
         # remove matches with IOU below threshold (i.e. too far apart)
+        matches = match_hungarian(locations,coords_list[frame_num])        
         
+        # traverse object list
+        for obj in active_objs:
+            # for all detached objects, update fsld and delete if too high
+            if matches[obj.obj_id] == -1:
+                pass
         # for all matches, update Kalman filter
+        # a match for the object with obj id i means that a non -1 index was returned for position i
         # for all detached objects, update fsld and delete if too high
         # for all unmatched objects, intialize new object
 
-# Kalman filter validation code
-detections = np.load("temp_detections.npy",allow_pickle= True)
-flattened = condense_detections(detections,style = "SORT")
-track_SORT(flattened)
+if __name__ == "__main__":
+    # Kalman filter validation code
+    detections = np.load("temp_detections.npy",allow_pickle= True)
+    flattened = condense_detections(detections,style = "SORT")
+    track_SORT(flattened)
