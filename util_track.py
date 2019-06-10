@@ -423,10 +423,10 @@ def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 15):
         for j in range(0,len(second)):
             if j not in matches:
                 new_obj = KF_Object(second[j],frame_num,mod_err,meas_err,state_err)
+                new_obj.all.append(new_obj.get_coords())
+                new_obj.tags.append(1) # indicates object detected in this frame
                 active_objs.append(new_obj)
-                obj.all.append(obj.get_coords())
-                obj.tags.append(1) # indicates object detected in this frame
-        
+
         
         # move all necessary objects to inactive list
         move_to_inactive.sort()
@@ -444,11 +444,10 @@ def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 15):
         obj = objs[j]
         first_frame = int(obj.first_frame)
         for i in range(0,len(obj.all)):
-            print(i,j,first_frame,len(obj.all))
             points_array[i+first_frame,j*2] = obj.all[i][0]
             points_array[i+first_frame,(j*2)+1] = obj.all[i][1]
     
-    return objs, point_array
+    return objs, points_array
             
             
 
@@ -456,5 +455,4 @@ if __name__ == "__main__":
     # Kalman filter validation code
     detections = np.load("temp_detections.npy",allow_pickle= True)
     flattened = condense_detections(detections,style = "SORT")
-    trackings = track_SORT(flattened)
-    objs, point_array = objs_to_point_array(trackings,flattened)
+    objs,point_array = track_SORT(flattened)
