@@ -96,10 +96,10 @@ def match_greedy(first,second,threshold = 10):
         dist[:,min_s] = np.inf
         dist[min_f,:] = np.inf
         
-    return matchings
+    return np.ndarray.astype(matchings,int)
 
 
-def match_hungarian(first,second):
+def match_hungarian(first,second,iou_cutoff = 0.5):
     """
     performs  optimal (in terms of sum distance) matching of points 
     in first to second using the Hungarian algorithm
@@ -114,6 +114,31 @@ def match_hungarian(first,second):
             dist[i,j] = np.sqrt((first[i,0]-second[j,0])**2 + (first[i,1]-second[j,1])**2)
             
     _, matchings = linear_sum_assignment(dist)
+    
+    # calculate intersection over union  (IOU) for all matches
+    for i,j in enumerate(matchings):
+        x1_left = first[i][0] -first[i][2]*first[i][3]/2
+        x2_left = second[j][0] -second[j][2]*second[j][3]/2
+        x1_right= first[i][0] + first[i][2]*first[i][3]/2
+        x2_right = second[j][0] +second[j][2]*second[j][3]/2
+        x_intersection = min(x1_right,x2_right) - max(x1_left,x2_left) 
+        
+        y1_left = first[i][1] -first[i][2]/2.0
+        y2_left = second[j][1] -second[j][2]/2.0
+        y1_right= first[i][1] + first[i][2]/2.0
+        y2_right = second[j][1] +second[j][2]/2.0
+        y_intersection = min(y1_right,y2_right) - max(y1_left,y2_left)
+        
+        a1 = first[i,3]*first[i,2]**2 
+        a2 = second[j,3]*second[j,2]**2 
+        intersection = x_intersection*y_intersection
+         
+        iou = intersection / (a1+a2-intersection) 
+        
+        # supress matchings with iou below cutoff
+        if iou < iou_cutoff:
+            matchings[i] = -1
+            
     return matchings
 
 
@@ -343,6 +368,7 @@ def track_SORT(coords_list):
         
         # 3. match - these arrays are both N x 4 but last two columns will be ignored 
         matches = match_hungarian(locations,coords_list[frame_num])
+        matches2 = match_greedy(locations,coords_list[frame_num],threshold = 40)
         # remove matches with IOU below threshold (i.e. too far apart)
         
         # for all matches, update Kalman filter
