@@ -8,7 +8,7 @@ from pytorch_yolo_v3.yolo_detector import Darknet_Detector
 
 # import utility functions
 from util_detect import detect_video, remove_duplicates
-from util_track import extract_obj_coords
+from util_track import extract_obj_coords,track_SORT,condense_detections
 from util_transform import get_best_transform, transform_pt_array, velocities_from_pts, plot_velocities
 from util_draw import draw_world, draw_track, draw_track_world
 
@@ -16,7 +16,7 @@ from util_draw import draw_world, draw_track, draw_track_world
   
 if __name__ == "__main__":
     
-    savenum = 0 # assign unique num to avoid overwriting as necessary
+    savenum = 1 # assign unique num to avoid overwriting as necessary
     show = True
     
     # name in files
@@ -61,8 +61,16 @@ if __name__ == "__main__":
         np.save("pipeline_files/detections{}.npy".format(savenum), detections)
 
     # track objects and draw on video
-    point_array, objs = extract_obj_coords(detections)
-    #draw_track(point_array,detect_file,track_file,show)
+    SORT = True
+    if SORT:
+        detections = condense_detections(detections,style = "SORT")
+        objs, point_array = track_SORT(detections,mod_err = 1, meas_err = 1, state_err = 100, fsld_max = 15)
+    else:
+        point_array, objs = extract_obj_coords(detections)
+
+            
+
+    draw_track(point_array,detect_file,track_file,show)
     
     # get transform for camera to world space and transform object points
     cam_pts = np.load('im_coord_matching/cam_points2.npy')
