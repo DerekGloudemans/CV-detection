@@ -113,7 +113,13 @@ def match_hungarian(first,second,iou_cutoff = 0.5):
         for j in range(0,len(second)):
             dist[i,j] = np.sqrt((first[i,0]-second[j,0])**2 + (first[i,1]-second[j,1])**2)
             
-    _, matchings = linear_sum_assignment(np.transpose(dist))
+    a, b = linear_sum_assignment(dist)
+    
+    # convert into expected form
+    matchings = np.zeros(len(first))-1
+    for idx in range(0,len(a)):
+        matchings[a[idx]] = b[idx]
+    matchings = np.ndarray.astype(matchings,int)
     
     # calculate intersection over union  (IOU) for all matches
     for i,j in enumerate(matchings):
@@ -272,18 +278,37 @@ def extract_obj_coords(detections,style = "center"):
             
     return points_array, objs
 
+
+def objs_to_point_array(objs,coords):
+    """
+    converts object list output by tracker into point_array
+    returns point_array - a t x 2N array where t is the number of frames and N
+    is the total number of unique objects detected in the video
+    """
+    # create an array where each row represents a frame and each two columns represent an object
+    points_array = np.zeros([len(coords),len(objs)*2])-1
+    for j in range(0,len(objs)):
+        obj = objs[j]
+        first_frame = int(obj.first_frame)
+        for i in range(0,len(obj.all)):
+            points_array[i+first_frame,j*2] = obj.all[i][0]
+            points_array[i+first_frame,(j*2)+1] = obj.all[i][1]
+            
+    return points_array
+
+
 class KF_Object():
     """
     A wrapper class that stores a Kalman filter for tracking the object as well
     as some other parameters, variables and all object positions
     """
-    def __init__(self, xysr,obj_id,frame_num,mod_err,meas_err,state_err):
+    def __init__(self, xysr,frame_num,mod_err,meas_err,state_err):
         # use mod_err,meas_err, and state_err to tune filter
         
         self.first_frame = frame_num # first frame in which object is detected
         self.fsld = 0 # frames since last detected
         self.all = [] # all positions of object across frames
-        self.obj_id = obj_id # position in coords list
+        self.tags = []
         t = 1/30.0
         
         # intialize state (generally x but called state to avoid confusion here)
@@ -313,7 +338,7 @@ class KF_Object():
         self.kf.predict()
     
     def update(self,measurement):
-        self.kf.update()
+        self.kf.update(measurement)
     
     def get_x(self):
         """
@@ -329,7 +354,7 @@ class KF_Object():
         return self.kf.x[[0,3,6,8],0]
 
     
-def track_SORT(coords_list):    
+def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 15):    
     """
     Uses the SORT algorithm for object tracking. 
     detections - A list of D x 4 numpy arrays with x centroid, y centroid, scale, ratio
@@ -343,7 +368,8 @@ def track_SORT(coords_list):
     
     # initialize with all objects found in first frame
     for i,row in enumerate(coords_list[0]):
-        obj = KF_Object(row,i,0,1,1,100)
+        obj = KF_Object(row,0,mod_err,meas_err,state_err)
+        obj.all.append(obj.get_coords())
         active_objs.append(obj)
 
     # loop through all frames
@@ -368,20 +394,67 @@ def track_SORT(coords_list):
         
         # 3. match - these arrays are both N x 4 but last two columns will be ignored 
         # remove matches with IOU below threshold (i.e. too far apart)
-        matches = match_hungarian(locations,coords_list[frame_num])        
+        second = coords_list[frame_num]
+        matches = match_hungarian(locations,second)        
+        #matches2 = match_greedy(locations,second)
         
         # traverse object list
-        for obj in active_objs:
-            # for all detached objects, update fsld and delete if too high
-            if matches[obj.obj_id] == -1:
-                pass
-        # for all matches, update Kalman filter
-        # a match for the object with obj id i means that a non -1 index was returned for position i
-        # for all detached objects, update fsld and delete if too high
+        move_to_inactive = []
+        for i in range(0,len(active_objs)):
+            obj = active_objs[i]
+            
+            # update fsld and delete if too high
+            if matches[i] == -1:
+                obj.fsld += 1
+                obj.all.append(obj.get_coords())
+                obj.tags.append(0) # indicates object not detected in this frame
+                if obj.fsld > fsld_max:
+                    move_to_inactive.append(i)
+            
+            else: # object was matched        
+                # update Kalman filter
+                measure_coords = second[matches[i]]
+                obj.update(measure_coords)
+                obj.fsld = 0
+                obj.all.append(obj.get_coords())
+                obj.tags.append(1) # indicates object detected in this frame
+
         # for all unmatched objects, intialize new object
+        for j in range(0,len(second)):
+            if j not in matches:
+                new_obj = KF_Object(second[j],frame_num,mod_err,meas_err,state_err)
+                active_objs.append(new_obj)
+                obj.all.append(obj.get_coords())
+                obj.tags.append(1) # indicates object detected in this frame
+        
+        
+        # move all necessary objects to inactive list
+        move_to_inactive.sort()
+        move_to_inactive.reverse()
+        for idx in move_to_inactive:
+            inactive_objs.append(active_objs[idx])
+            del active_objs[idx]
+            
+            
+    objs = active_objs + inactive_objs
+    
+    # create final point array
+    points_array = np.zeros([len(coords_list),len(objs)*2])-1
+    for j in range(0,len(objs)):
+        obj = objs[j]
+        first_frame = int(obj.first_frame)
+        for i in range(0,len(obj.all)):
+            print(i,j,first_frame,len(obj.all))
+            points_array[i+first_frame,j*2] = obj.all[i][0]
+            points_array[i+first_frame,(j*2)+1] = obj.all[i][1]
+    
+    return objs, point_array
+            
+            
 
 if __name__ == "__main__":
     # Kalman filter validation code
     detections = np.load("temp_detections.npy",allow_pickle= True)
     flattened = condense_detections(detections,style = "SORT")
-    track_SORT(flattened)
+    trackings = track_SORT(flattened)
+    objs, point_array = objs_to_point_array(trackings,flattened)

@@ -16,7 +16,7 @@ from util_draw import draw_world, draw_track, draw_track_world
   
 if __name__ == "__main__":
     
-    savenum = 12 # assign unique num to avoid overwriting as necessary
+    savenum = 0 # assign unique num to avoid overwriting as necessary
     show = True
     
     # name in files
