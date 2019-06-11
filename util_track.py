@@ -100,7 +100,7 @@ def match_greedy(first,second,threshold = 10):
     return np.ndarray.astype(matchings,int)
 
 
-def match_hungarian(first,second,iou_cutoff = 0.3):
+def match_hungarian(first,second,iou_cutoff = 0.1):
     """
     performs  optimal (in terms of sum distance) matching of points 
     in first to second using the Hungarian algorithm
@@ -313,11 +313,11 @@ class KF_Object():
         t = 1/30.0
         
         # intialize state (generally x but called state to avoid confusion here)
-        self.state = np.zeros([10,1])
-        self.state[0,0] = xysr[0]
-        self.state[1,0] = xysr[1]
-        self.state[2,0] = xysr[2]
-        self.state[3,0] = xysr[3]
+        state = np.zeros([10,1])
+        state[0,0] = xysr[0]
+        state[1,0] = xysr[1]
+        state[2,0] = xysr[2]
+        state[3,0] = xysr[3]
         
         F = np.identity(10) # state transition matrix
         for i in range(0,6):
@@ -326,7 +326,7 @@ class KF_Object():
         H = np.zeros([4,10]) # initialize measurement transition matrix
         H[[0,1,2,3],[0,1,2,3]] = 1
         
-        second_order = True
+        second_order = False
         if second_order == True:
             # initialize Kalman Filter to track object
             self.kf = KalmanFilter(dim_x = 10, dim_z = 4)
@@ -336,10 +336,11 @@ class KF_Object():
             self.kf.R = np.identity(4)* meas_err # measurement error covariance matrix
             self.kf.F = F
             self.kf.H = H 
+
         else:
             # initialize Kalman Filter to track object
             self.kf = KalmanFilter(dim_x = 7, dim_z = 4)
-            self.kf.x = self.state # state
+            self.kf.x = state[:7,:] # state
             self.kf.P *= state_err # state error covariance matrix
             self.kf.Q = np.identity(7)*mod_err # model error covariance matrix
             self.kf.R = np.identity(4)* meas_err # measurement error covariance matrix

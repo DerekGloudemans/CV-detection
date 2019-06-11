@@ -16,7 +16,7 @@ from util_draw import draw_world, draw_track, draw_track_world
   
 if __name__ == "__main__":
     
-    savenum = 9 # assign unique num to avoid overwriting as necessary
+    savenum = 0 # assign unique num to avoid overwriting as necessary
     show = True
     
     # name in files
@@ -38,7 +38,7 @@ if __name__ == "__main__":
                   'wt_file': 'pytorch_yolo_v3/yolov3.weights',
                   'class_file': 'pytorch_yolo_v3/data/coco.names',
                   'pallete_file': 'pytorch_yolo_v3/pallete',
-                  'nms_threshold': 0.1,
+                  'nms_threshold': 0.5,
                   'conf': 0.52,
                   'resolution': 1024,
                   'num_classes': 80}
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     try:
         detections = np.load("pipeline_files/detections{}.npy".format(savenum),allow_pickle= True)
     except:
-        detections = detect_video(video_file,net,show = False, save_file=detect_file)
+        detections = detect_video(video_file,net,show, save_file=detect_file)
         detections = remove_duplicates(detections)
         np.save("pipeline_files/detections{}.npy".format(savenum), detections)
 
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     SORT = True
     if SORT:
         detections = condense_detections(detections,style = "SORT")
-        objs, point_array = track_SORT(detections,mod_err = 1, meas_err = 1, state_err = 1000, fsld_max = 15)
+        objs, point_array = track_SORT(detections,mod_err = 1, meas_err = 100, state_err = 1000, fsld_max = 60)
     else:
         point_array, objs = extract_obj_coords(detections)
 
