@@ -100,7 +100,7 @@ def match_greedy(first,second,threshold = 10):
     return np.ndarray.astype(matchings,int)
 
 
-def match_hungarian(first,second,iou_cutoff = 0.1):
+def match_hungarian(first,second,iou_cutoff = 0.5):
     """
     performs  optimal (in terms of sum distance) matching of points 
     in first to second using the Hungarian algorithm
@@ -165,13 +165,20 @@ def match_all(coords_list,match_fn = match_greedy):
     return out_list
 
 
-def get_objects(matchings, coords,snap_threshold = 30, frames_lost_lim = 20):
+def track_naive(coords,style = "center",snap_threshold = 30, frames_lost_lim = 20):
+    """ 
+    Tracks objects using the naive assumption that unobserved or detached objects
+    do not change position. 
+    pt_location = "center" or "bottom_center" and specifies where the object 
+    point should be placed
+    returns point_array - a t x 2N array where t is the number of frames and N
+    is the total number of unique objects detected in the video
     """
-    Uses matchings to find all unique objects accross multiple frames
-    """
+    matchings = match_all(coords)   
+    
+    # track
     active_objs = []
     inactive_objs = []
-    
     # initialize with all objects found in first frame
     for i,row in enumerate(coords[0]):
         obj = {
@@ -253,20 +260,7 @@ def get_objects(matchings, coords,snap_threshold = 30, frames_lost_lim = 20):
             inactive_objs.append(active_objs[idx])
             del active_objs[idx]
             
-    return active_objs + inactive_objs
-
-
-def extract_obj_coords(detections,style = "center"):
-    """ 
-    wrapper function that condenses, matches, and extracts objects from a set
-    of detections. pt_location = "center" or "bottom_center" and specifies
-    where the object point should be placed
-    returns point_array - a t x 2N array where t is the number of frames and N
-    is the total number of unique objects detected in the video
-    """
-    coords = condense_detections(detections,style)
-    matchings = match_all(coords)   
-    objs = get_objects(matchings, coords)
+    objs = active_objs + inactive_objs
 
     # create an array where each row represents a frame and each two columns represent an object
     points_array = np.zeros([len(coords),len(objs)*2])-1
@@ -278,25 +272,6 @@ def extract_obj_coords(detections,style = "center"):
             points_array[i+first_frame,(j*2)+1] = obj['all'][i][1]\
             
     return points_array, objs
-
-
-def objs_to_point_array(objs,coords):
-    """
-    converts object list output by tracker into point_array
-    returns point_array - a t x 2N array where t is the number of frames and N
-    is the total number of unique objects detected in the video
-    """
-    # create an array where each row represents a frame and each two columns represent an object
-    points_array = np.zeros([len(coords),len(objs)*2])-1
-    for j in range(0,len(objs)):
-        obj = objs[j]
-        first_frame = int(obj.first_frame)
-        for i in range(0,len(obj.all)):
-            points_array[i+first_frame,j*2] = obj.all[i][0]
-            points_array[i+first_frame,(j*2)+1] = obj.all[i][1]
-            
-    return points_array
-
 
 class KF_Object():
     """
@@ -318,6 +293,7 @@ class KF_Object():
         state[1,0] = xysr[1]
         state[2,0] = xysr[2]
         state[3,0] = xysr[3]
+
         
         F = np.identity(10) # state transition matrix
         for i in range(0,6):
@@ -326,11 +302,11 @@ class KF_Object():
         H = np.zeros([4,10]) # initialize measurement transition matrix
         H[[0,1,2,3],[0,1,2,3]] = 1
         
-        second_order = False
+        second_order = True
         if second_order == True:
             # initialize Kalman Filter to track object
             self.kf = KalmanFilter(dim_x = 10, dim_z = 4)
-            self.kf.x = self.state # state
+            self.kf.x = state # state
             self.kf.P *= state_err # state error covariance matrix
             self.kf.Q = np.identity(10)*mod_err # model error covariance matrix
             self.kf.R = np.identity(4)* meas_err # measurement error covariance matrix
@@ -409,7 +385,7 @@ def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 60):
         # remove matches with IOU below threshold (i.e. too far apart)
         second = coords_list[frame_num]
         matches = match_hungarian(locations,second)        
-        #matches2 = match_greedy(locations,second)
+        #matches = match_greedy(locations,second)
         
         # traverse object list
         move_to_inactive = []
