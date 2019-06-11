@@ -81,6 +81,16 @@ def detect_video(video_file, detector, verbose = True, show = True, save_file = 
     print("Detection finished")
     return all_detections
 
+def remove_duplicates(detections):
+    """
+    for each item in detections (1 frame), removes all identical objects
+    """
+    
+    reduced_detections = []
+    for item in detections:
+        new_item = np.unique(item,axis = 0)
+        reduced_detections.append(new_item)
+    return reduced_detections
 
 def condense_detections(detections,pt_location = "center"):
     """
