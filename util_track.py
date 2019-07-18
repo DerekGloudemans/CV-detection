@@ -341,6 +341,10 @@ class KF_Object():
         returns 1d numpy array of x,y,s,r
         """
         return self.kf.x[[0,1,2,3],0]
+    
+    def get_xysr_cov(self):
+        covs = np.array([self.kf.P[i,i] for i in [0,1,2,3]])
+        return self.kf.x[[0,1,2,3],0], covs
 
     
 def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 60):    
