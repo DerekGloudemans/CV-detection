@@ -61,7 +61,7 @@ def condense_detections(detections,style = "center"):
             
     elif style == "SORT_with_conf":
         for item in detections:
-            coords = np.zeros([len(item),4])
+            coords = np.zeros([len(item),5])
             for i in range(0,len(item)):
                 coords[i,0] = (item[i,1]+item[i,3])/2.0 # x centroid
                 coords[i,1] = (item[i,2]+item[i,4])/2.0 # y centroid
@@ -437,8 +437,7 @@ def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 60):
             points_array[i+first_frame,(j*2)+1] = obj.all[i][1]
     
     return objs, points_array
-            
-            
+    
 
 if __name__ == "__main__":
     # Kalman filter validation code

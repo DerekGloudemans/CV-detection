@@ -15,7 +15,7 @@ from util_draw import draw_world, draw_track, draw_track_world
 
 if __name__ == "__main__":
     
-    savenum = 0 # assign unique num to avoid overwriting as necessary
+    savenum = 3 # assign unique num to avoid overwriting as necessary
     show = True
     
     # name in files
@@ -55,12 +55,12 @@ if __name__ == "__main__":
     try:
         detections = np.load("pipeline_files/detections{}.npy".format(savenum),allow_pickle= True)
     except:
-        detections = detect_video(video_file,net,show, save_file=detect_file)
+        detections = detect_video(video_file,net,show = False, save_file=None)
         detections = remove_duplicates(detections)
         np.save("pipeline_files/detections{}.npy".format(savenum), detections)
 
     # track objects and draw on video
-    SORT = False
+    SORT = True
     if SORT:
         detections = condense_detections(detections,style = "SORT")
         objs, point_array = track_SORT(detections,mod_err = 1, meas_err = 10, state_err = 1000, fsld_max = 60)
