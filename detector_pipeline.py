@@ -15,7 +15,7 @@ from util_draw import draw_world, draw_track, draw_track_world
 
 if __name__ == "__main__":
     
-    savenum = 3 # assign unique num to avoid overwriting as necessary
+    savenum = 4 # assign unique num to avoid overwriting as necessary
     show = True
     
     # name in files
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     try:
         detections = np.load("pipeline_files/detections{}.npy".format(savenum),allow_pickle= True)
     except:
-        detections = detect_video(video_file,net,show = False, save_file=None)
+        detections = detect_video(video_file,net,show = True, save_file=detect_file)
         detections = remove_duplicates(detections)
         np.save("pipeline_files/detections{}.npy".format(savenum), detections)
 
