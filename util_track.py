@@ -302,7 +302,7 @@ class KF_Object():
         H = np.zeros([4,10]) # initialize measurement transition matrix
         H[[0,1,2,3],[0,1,2,3]] = 1
         
-        second_order = True
+        second_order = False
         if second_order == True:
             # initialize Kalman Filter to track object
             self.kf = KalmanFilter(dim_x = 10, dim_z = 4)
@@ -311,7 +311,9 @@ class KF_Object():
             self.kf.Q = np.identity(10)*mod_err # model error covariance matrix
             self.kf.R = np.identity(4)* meas_err # measurement error covariance matrix
             self.kf.F = F
-            self.kf.H = H 
+            self.kf.H = H
+            
+
 
         else:
             # initialize Kalman Filter to track object
@@ -322,6 +324,12 @@ class KF_Object():
             self.kf.R = np.identity(4)* meas_err # measurement error covariance matrix
             self.kf.F = F[:7,:7]
             self.kf.H = H[:,:7] 
+            
+        # scale errors in r and s so they are comparable to x and y
+        self.kf.Q[2,2] = self.kf.Q[2,2] / 10
+        self.kf.R[2,2] = self.kf.Q[2,2] / 10
+        self.kf.Q[3,3] = self.kf.Q[2,2] / 1000
+        self.kf.Q[2,2] = self.kf.Q[2,2] / 1000
         
     def predict(self):
         self.kf.predict()

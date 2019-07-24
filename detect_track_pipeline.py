@@ -8,7 +8,7 @@ import torchvision.transforms.functional as TF
 
 # import detector
 from pytorch_yolo_v3.yolo_detector import Darknet_Detector
-from torchvision_classifiers.split_net_utils import SplitNet, load_model#, monte_carlo_detect
+from torchvision_classifiers.split_net_utils import SplitNet, load_model, plot_batch#, monte_carlo_detect
 
 # import utility functions
 from util_detect import detect_video, remove_duplicates
@@ -41,21 +41,28 @@ def monte_carlo_detect(image,model,state_vec,covariance_vec, device, num_samples
     for i in range(num_samples):
         x = np.random.normal(state_vec[0],np.sqrt(covariance_vec[0]))
         y = np.random.normal(state_vec[1],np.sqrt(covariance_vec[1]))
-        s = np.random.normal(state_vec[2],np.sqrt(covariance_vec[2]))
+        s = np.random.normal(state_vec[2],0.5*np.sqrt(covariance_vec[2]))
         r = np.random.normal(state_vec[3],np.sqrt(covariance_vec[3])/100.0) #right now, r is about 2 orders of magnitude smaller than other state variables
         
         # all windows are square
-        if r > 1:
-            window_width = s*r
-        else:
-            window_width = s
-        windows[i,0] = x - window_width
-        windows[i,1] = y - window_width
-        windows[i,2] = x + window_width
-        windows[i,3] = y + window_width
+        if True:
+            if r >1:
+                window_width = s*r
+            else:
+                window_width = s
+        windows[i,0] = x - window_width/2
+        windows[i,1] = y - window_width/2
+        windows[i,2] = x + window_width/2
+        windows[i,3] = y + window_width/2
+        
+        if True:
+            windows[i,0] = x - s*r/2
+            windows[i,1] = y - s/2
+            windows[i,2] = x + s*r/2
+            windows[i,3] = y + s/2
         
     # generate windowed images 
-    pad_width = 200
+    pad_width = 0
     transform = transforms.Compose([\
         transforms.Resize((224,224)),
         transforms.ToTensor(),
@@ -76,6 +83,10 @@ def monte_carlo_detect(image,model,state_vec,covariance_vec, device, num_samples
     ims = torch.stack(ims)
     ims = ims.to(device)
     
+    # try plotting results before transfrmation to global coords
+    if True:
+        plot_batch(model,ims)
+    
     # pass to model
     cls_out, reg_out = model(ims)
     cls_out = cls_out.data.cpu().numpy()
@@ -87,20 +98,34 @@ def monte_carlo_detect(image,model,state_vec,covariance_vec, device, num_samples
     conf = cls_out[idx,1]
     
     # scale back to crop window coords
-    box = reg_out[idx] * 224#224*4 - 224*2
+    box = reg_out[idx] * window_width*4 - window_width*2
     
+    if True:
+
+         box = reg_out[idx]
+         window = windows[idx]
+         s = window[3]-window[1]
+         r = (window[2]-window[0])/s
+         box[0] = box[0] * s*r
+         box[1] = box[1] * s
+         box[2] = box[2] * s*r
+         box[3] = box[3] * s
+         
     # scale to abs img coords - add x min and multiply by factor by which image 
     # was scaled down to fit into 224 window
-    box[0] = box[0] * window_width/224 + windows[idx,0] # xmin
-    box[1] = box[1] * window_width/224 + windows[idx,1] # ymin
-    box[2] = box[2] * window_width/224 + windows[idx,0] # xmax
-    box[3] = box[3] * window_width/224 + windows[idx,1] # ymax
-    box = box 
+    box[0] = (box[0]) + windows[idx,0] # xmin
+    box[1] = (box[1]) + windows[idx,1] # ymin
+    box[2] = (box[2]) + windows[idx,0] # xmax
+    box[3] = (box[3]) + windows[idx,1] # ymax
+    box = box
     
     im = np.array(image)
     for window in np.round(windows):
-        im = cv2.rectangle(im,(1,2),(23,24),(0.8,0.9,0.1),2)    
-    im = cv2.rectangle(im,(box[0],box[1]),(box[2],box[3]),(0.8,0.1,0.1),2)
+        im = cv2.rectangle(im,(int(window[0]),int(window[1])),(int(window[2]),int(window[3])),(0,0,255),1)
+    window = windows[idx,:]
+    
+    im = cv2.rectangle(im,(int(window[0]),int(window[1])),(int(window[2]),int(window[3])),(255,0,50),1)
+    im = cv2.rectangle(im,(box[0],box[1]),(box[2],box[3]),(0,255,0),2)
     cv2.imshow("frame",im)
     cv2.waitKey(0)
     
@@ -156,7 +181,7 @@ if __name__ == "__main__":
         yolo = Darknet_Detector(**params)
     
         # tests that net is working correctly
-        if True:
+        if False:
             test ='pytorch_yolo_v3/imgs/person.jpg'
             out = yolo.detect(test)
             torch.cuda.empty_cache()    
@@ -295,13 +320,13 @@ if __name__ == "__main__":
             start = time.time()
             # get next frame or None
             ret, frame = cap.read()
-            if frame_num > 5:
-                break
+#            if frame_num > 5:
+#                break
             
 #             # save frame to file if necessary
 #            if save_file != None:
 #                out.write(im_out)
-#            
+            
 #            # output frame if necessary
 #            if show:
 #                im = cv2.resize(im_out, (1920, 1080))               
