@@ -58,7 +58,7 @@ if __name__ == "__main__":
       
 
     splitnet = SplitNet()
-    checkpoint_file = "torchvision_classifiers/checkpoints/7-15-2019-bbox-loss/checkpoint_90.pt"
+    checkpoint_file = "torchvision_classifiers/splitnet_checkpoint_trained_bboxes.pt"
     checkpoint = torch.load(checkpoint_file)
     splitnet.load_state_dict(checkpoint['model_state_dict'])
     splitnet = splitnet.to(device)
