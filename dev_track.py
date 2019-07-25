@@ -155,7 +155,8 @@ if __name__ == "__main__":
                 matches = [i for i in range(0,len(locations))]
                 windows = np.zeros([len(active_objs),4])
                 
-                
+                # will hold left_pad, top_pad, and scale factor for each object
+                transform_params = np.zeros([len(active_objs),3])
                 
                 # 2a. for each object, generate window to search in
                 for i in range(0, len(locations)):
@@ -185,7 +186,7 @@ if __name__ == "__main__":
                     ])
     
                 ims = []
-                for window in windows:
+                for i,window in enumerate(windows):
                     # crop
                     del_x = window[2]-window[0]
                     del_y = window[3]-window[1]
@@ -196,16 +197,22 @@ if __name__ == "__main__":
                     width = crop_im.size[0]
                     if height < width:
                         diff = width - height
-                        # padding (left, top, right, bottom)
-                        padding = (0,int(diff/2+diff%2),0,int(diff/2))
+                        # padding (left, top, right, bottom)\
+                        top_padding = int(diff/2+diff%2)
+                        transform_params[i,0] = top_padding # save for untransform later
+                        padding = (0,top_padding,0,int(diff/2))
                     elif height == width:
                         padding = 0
                     else:
                         diff = height - width
-                        padding = (int(diff/2+diff%2),0,int(diff/2),0)
+                        left_padding = int(diff/2+diff%2)
+                        transform_params[i,1] = left_padding # save for untransform later
+                        padding = (left_padding,0,int(diff/2),0)
                     
                     pad_im = TF.pad(crop_im, padding, fill=0, padding_mode='constant')
-                                        # scale, normalize and convert to tensor
+                                        
+                    # scale, normalize and convert to tensor
+                    transform_params[i,2] = pad_im.size[0]
                     im = transform(pad_im)
                     ims.append(im)
                    
@@ -213,10 +220,35 @@ if __name__ == "__main__":
                 ims = torch.stack(ims)
                 ims = ims.to(device)
                 
-                # TODO 2d. use the batch_plot to show these tensors, verifying they match up
-                plot_batch(splitnet,ims)
-                # TODO - pass batch to splitnet
+                # 2d. use the batch_plot to show these tensors, verifying they match up
+                if True:
+                    plot_batch(splitnet,ims)
                 
+                # TODO - 2e. pass batch to splitnet
+                cls_outs, reg_out = splitnet(ims)
+                bboxes = reg_out.data.cpu().numpy()
+                preds = cls_outs.data.cpu().numpy()
+    
+                # TODO - 2f. parse back into global image 
+                new_windows = np.zeros([len(windows),4])
+                for i in range(0,len(bboxes)):
+        
+                    # transform bbox coords back into im pixel coords
+                    bbox = (bboxes[i]* 224*4 - 224*2).astype(int)
+                    
+                    # undo scale
+                    bbox = (bbox * transform_params[i,2]/224).astype(int)
+                    
+                    # undo pad and crop
+                    bbox[0] = bbox[0] + transform_params[i,0] + windows[i,0]
+                    bbox[1] = bbox[1] + transform_params[i,1] + windows[i,1]
+                    bbox[2] = bbox[2] + transform_params[i,0] + windows[i,0]
+                    bbox[3] = bbox[3] + transform_params[i,1] + windows[i,1]
+                    new_windows[i] = bbox
+                    
+                # TODO - plot output bboxes on original image to verify correctness
+                plot_windows(frame.copy(),new_windows)
+                # TODO - transform into state
                 # TODO - parse results
                 
                
