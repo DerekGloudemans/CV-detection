@@ -8,7 +8,7 @@ import torchvision.transforms.functional as TF
 
 # import detector
 from pytorch_yolo_v3.yolo_detector import Darknet_Detector
-from torchvision_classifiers.split_net_utils import SplitNet, load_model, plot_batch#, monte_carlo_detect
+from torchvision_classifiers.parallel_regression_classification import SplitNet, load_model, plot_batch#, monte_carlo_detect
 
 # import utility functions
 from util_detect import detect_video, remove_duplicates
