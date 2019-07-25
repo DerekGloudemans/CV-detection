@@ -8,7 +8,7 @@ import torchvision.transforms.functional as TF
 
 # import detector
 from pytorch_yolo_v3.yolo_detector import Darknet_Detector
-from torchvision_classifiers.split_net_utils import SplitNet, load_model, plot_batch#, monte_carlo_detect
+from torchvision_classifiers.parallel_regression_classification import SplitNet, plot_batch
 
 # import utility functions
 from util_detect import detect_video, remove_duplicates
@@ -17,28 +17,44 @@ from util_transform import get_best_transform, transform_pt_array, velocities_fr
 from util_draw import draw_world, draw_track, draw_track_world
 import time
 
+def plot_windows(im,windows):
+    """
+    plots rectangular windows on a CV2 image.
+    im - cv2 image
+    windows - num_windows x 4 array where one row is x_min, y_min, x_max, y_max
+    """
+    
+    #im =  cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+    for window in windows:
+        im = cv2.rectangle(im,(int(window[0]),int(window[1])),(int(window[2]),int(window[3])),(155,155,0),2)
+    im = cv2.resize(im,(1620,1080))
+    cv2.imshow("frame",im)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     
     # set up a bunch of parameters
-    savenum = 3 # assign unique num to avoid overwriting as necessary
+    savenum = 0 # assign unique num to avoid overwriting as necessary
+    show = True
+     
+    # Kalman Filter variables
     mod_err = 100
     meas_err = 0.01
-    state_err = 1 # for KF
+    state_err = 1 
+    
+    # tracking parameters
     yolo_frequency = 15
     fsld_max = 10
     conf_threshold = 0.7
     
-    show = True
-    
-    #video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
+   
+    # relevant file paths
     video_file = '/media/worklab/data_HDD/cv_data/video/traffic_assorted/traffic_0.avi'
     save_file = 'temp_{}.avi'.format(savenum)
+    splitnet_checkpoint = "/home/worklab/Documents/Checkpoints/splitnet_checkpoint_12.pt"
     
-    use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda:0" if use_cuda else "cpu")
-    torch.cuda.empty_cache()
-
+    # yolo files and parameters
     params = {'cfg_file' :'pytorch_yolo_v3/cfg/yolov3.cfg',
               'wt_file': 'pytorch_yolo_v3/yolov3.weights',
               'class_file': 'pytorch_yolo_v3/data/coco.names',
@@ -48,22 +64,26 @@ if __name__ == "__main__":
               'resolution': 1024,
               'num_classes': 80}
     
+    # enable CUDA
+    use_cuda = torch.cuda.is_available()
+    device = torch.device("cuda:0" if use_cuda else "cpu")
+    torch.cuda.empty_cache()
+    
+    # load models
     yolo = Darknet_Detector(**params)
+
+    splitnet = SplitNet()
+    checkpoint = torch.load(splitnet_checkpoint)
+    splitnet.load_state_dict(checkpoint['model_state_dict'])
+    splitnet = splitnet.to(device)
 
     # tests that net is working correctly
     if False:
         test ='pytorch_yolo_v3/imgs/person.jpg'
         out = yolo.detect(test)
         torch.cuda.empty_cache()    
-      
-
-    splitnet = SplitNet()
-    checkpoint_file = "torchvision_classifiers/splitnet_checkpoint_trained_bboxes.pt"
-    checkpoint = torch.load(checkpoint_file)
-    splitnet.load_state_dict(checkpoint['model_state_dict'])
-    splitnet = splitnet.to(device)
-    
-    print("Models reloaded.")
+     
+    print("Models loaded.")
     
     
     ############ initialize tracking procedure
@@ -110,14 +130,16 @@ if __name__ == "__main__":
                 obj.predict()
                 
             # 2. get new objects using either yolo or splitnet, depending on frame
-            
+            # in either case, locations holds states of current frame and second
+            # holds states of next frame
             # object locations according to KF
+            
             locations = np.zeros([len(active_objs),4])
             covs = np.zeros([len(active_objs),4])
-            
             for i,obj in enumerate(active_objs):
                 locations[i,:],covs[i,:] = obj.get_xysr_cov()
             
+            # use yolo
             if frame_num % yolo_frequency == 0:
                 detections,_ = yolo.detect(frame, show = False, verbose = False)
                 detections = condense_detections(remove_duplicates(detections.cpu().unsqueeze(0).numpy()),style = "SORT_with_conf")    
@@ -125,18 +147,41 @@ if __name__ == "__main__":
             
                 matches = match_hungarian(locations,second)        
                 #matches = match_greedy(locations,second)
+            
+            # use splitnet
             else:
                 # populate second with detections from splitnet
                 second = np.zeros([len(active_objs),5])
                 matches = [i for i in range(0,len(locations))]
-                pil_im = Image.fromarray(frame)
-                for i in range(0,len(active_objs)):
+                windows = np.zeros([len(active_objs),4])
+                
+                
+                
+                # TODO - for each object, generate window to search in
+                for i in range(0, len(locations)):
+                    location = locations[i]
+                    cov = covs[i]
+                    x = location[0]
+                    y = location[1]
+                    s = location[2] + (cov[0]+cov[1]+cov[2])/8
+                    r = location[3]
+                    windows[i,0] = int(x - s*r/2)
+                    windows[i,2] = int(x + s*r/2)
+                    windows[i,1] = int(y - s/2)
+                    windows[i,3] = int(y + s/2)
                     
-                    second[i,:] = monte_carlo_detect(pil_im,splitnet,locations[i,:],covs[i,:],device,num_samples = 16)
-                     # supress match if confidence is too low
-                    #if second[i,4] < conf_threshold:
-                    #    matches[i] = -1
-                second = second[:,:4]
+                # TODO - plot make function to plot these windows on the original image to check
+                if False:
+                    plot_windows(frame,windows)
+                
+                # TODO - crop these into tensors, scale and normalize, etc.
+                pil_im = Image.fromarray(frame)
+
+                # TODO - use the batch_plot to show these tensors, verifying they match up
+                
+                # TODO - pass batch to splitnet
+                
+                # TODO - parse results
                 
                
             # 3. traverse object list
