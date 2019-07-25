@@ -157,7 +157,7 @@ if __name__ == "__main__":
                 
                 
                 
-                # TODO - for each object, generate window to search in
+                # 2a. for each object, generate window to search in
                 for i in range(0, len(locations)):
                     location = locations[i]
                     cov = covs[i]
@@ -170,15 +170,51 @@ if __name__ == "__main__":
                     windows[i,1] = int(y - s/2)
                     windows[i,3] = int(y + s/2)
                     
-                # TODO - plot make function to plot these windows on the original image to check
-                if False:
-                    plot_windows(frame,windows)
+                # 2b. plot windows on the original image to check
+                if True:
+                    plot_windows(frame.copy(),windows)
                 
-                # TODO - crop these into tensors, scale and normalize, etc.
+                #2c. crop these into tensors, scale and normalize, etc.
                 pil_im = Image.fromarray(frame)
 
-                # TODO - use the batch_plot to show these tensors, verifying they match up
+                # define transforms
+                transform = transforms.Compose([\
+                    transforms.Resize((224,224)),
+                    transforms.ToTensor(),
+                    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                    ])
+    
+                ims = []
+                for window in windows:
+                    # crop
+                    del_x = window[2]-window[0]
+                    del_y = window[3]-window[1]
+                    crop_im = TF.crop(pil_im,window[1],window[0],del_y,del_x)
+                    
+                    # generate pad to make square (alternatively, make a square window)
+                    height = crop_im.size[1]
+                    width = crop_im.size[0]
+                    if height < width:
+                        diff = width - height
+                        # padding (left, top, right, bottom)
+                        padding = (0,int(diff/2+diff%2),0,int(diff/2))
+                    elif height == width:
+                        padding = 0
+                    else:
+                        diff = height - width
+                        padding = (int(diff/2+diff%2),0,int(diff/2),0)
+                    
+                    pad_im = TF.pad(crop_im, padding, fill=0, padding_mode='constant')
+                                        # scale, normalize and convert to tensor
+                    im = transform(pad_im)
+                    ims.append(im)
+                   
+                # convert all images to a single tensor     
+                ims = torch.stack(ims)
+                ims = ims.to(device)
                 
+                # TODO 2d. use the batch_plot to show these tensors, verifying they match up
+                plot_batch(splitnet,ims)
                 # TODO - pass batch to splitnet
                 
                 # TODO - parse results
