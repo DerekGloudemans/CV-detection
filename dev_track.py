@@ -17,7 +17,7 @@ from util_transform import get_best_transform, transform_pt_array, velocities_fr
 from util_draw import draw_world, draw_track, draw_track_world
 import time
 
-def plot_windows(im,windows):
+def plot_windows(im,windows,show = True):
     """
     plots rectangular windows on a CV2 image.
     im - cv2 image
@@ -27,33 +27,36 @@ def plot_windows(im,windows):
     #im =  cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
     for window in windows:
         im = cv2.rectangle(im,(int(window[0]),int(window[1])),(int(window[2]),int(window[3])),(155,155,0),2)
-    im = cv2.resize(im,(1920,1080))
-    cv2.imshow("frame",im)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    if show:
+        im = cv2.resize(im,(1920,1080))
+        cv2.imshow("frame",im)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     
     # set up a bunch of parameters
     savenum = 0 # assign unique num to avoid overwriting as necessary
     show = True
-     
+    global wer # window expansion ratio
+    wer = 5 
+    
     # Kalman Filter variables
     mod_err = 100
     meas_err = 0.01
     state_err = 1 
     
     # tracking parameters
-    yolo_frequency = 4
+    yolo_frequency = 10
     fsld_max = 10
     conf_threshold = 0.7
-    window_expand = 0.3
+    window_expand = 0.25
     iou_threshold = 0.3
    
     # relevant file paths
     video_file = '/media/worklab/data_HDD/cv_data/video/traffic_assorted/traffic_0.avi'
     save_file = 'temp_{}.avi'.format(savenum)
-    splitnet_checkpoint = "/home/worklab/Documents/Checkpoints/splitnet_checkpoint_12.pt"
+    splitnet_checkpoint = "/home/worklab/Documents/Checkpoints/splitnet_centered5_checkpoint_13.pt"
     
     # yolo files and parameters
     params = {'cfg_file' :'pytorch_yolo_v3/cfg/yolov3.cfg',
@@ -147,15 +150,13 @@ if __name__ == "__main__":
                 second = detections[0]
                 second = second[:,:-1] # remove confidences
             
-                matches = match_hungarian(locations,second,iou_cutoff = iou_threshold)        
-                #matches = match_greedy(locations,second)
-            
             # use splitnet
             else:
                 # populate second with detections from splitnet
                 second = np.zeros([len(active_objs),4])
-                matches = [i for i in range(0,len(locations))]
                 windows = np.zeros([len(active_objs),4])
+                
+                matches = [i for i in range(0,len(locations))]
                 
                 # will hold left_pad, top_pad, and scale factor for each object
                 transform_params = np.zeros([len(active_objs),3])
@@ -227,7 +228,11 @@ if __name__ == "__main__":
                     plot_batch(splitnet,ims)
                 
                 # TODO - 2e. pass batch to splitnet
-                cls_outs, reg_out = splitnet(ims)
+                try:
+                    cls_outs, reg_out = splitnet(ims)
+                except RuntimeError:
+                    print("Divide batch so CUDA does not run out of memory")
+
                 bboxes = reg_out.data.cpu().numpy()
                 preds = cls_outs.data.cpu().numpy()
     
@@ -236,7 +241,7 @@ if __name__ == "__main__":
                 for i in range(0,len(bboxes)):
         
                     # transform bbox coords back into im pixel coords
-                    bbox = (bboxes[i]* 224*4 - 224*2).astype(int)
+                    bbox = (bboxes[i]* 224*wer - 224*(wer-1)/2).astype(int)
                     
                     # undo scale
                     bbox = (bbox * transform_params[i,2]/224).astype(int)
@@ -253,10 +258,28 @@ if __name__ == "__main__":
                     second[i,1] = (bbox[1] + bbox[3])/2 #y center
                     second[i,2] = (bbox[3] - bbox[1]) #s
                     second[i,3] = (bbox[2] - bbox[0])/second[i,2] #r
-                     
+                    
+
+                    
+                torch.cuda.empty_cache()
+                
+                # remove all detections with confidence below 50%
+                keep = []
+                for i in range(0,len(second)):
+                    if preds[i,1] > 0.5:
+                        keep.append(i)
+                second = second[keep,:]
+                
+                
+                # match - technically we should know which detections correspond
+                # to the objects from which they were generated but this deals 
+                # with unmatched objects better
+                matches = match_hungarian(locations,second,iou_cutoff = iou_threshold)        
+                #matches = match_greedy(locations,second)
+                
                 # plot output bboxes on original image to verify correctness
                 if True:
-                    plot_windows(frame.copy(),new_windows)
+                    plot_windows(frame,new_windows,show = not(show))
                 
                
             # 3. traverse object list
@@ -303,23 +326,25 @@ if __name__ == "__main__":
             frame_num += 1
             print("FPS of the video is {:5.2f}".format( 1.0 / (time.time() - start)))
             start = time.time()
-            # get next frame or None
-            ret, frame = cap.read()
-#            if frame_num > 5:
-#                break
+
             
-#             # save frame to file if necessary
+             # save frame to file if necessary
 #            if save_file != None:
 #                out.write(im_out)
             
-#            # output frame if necessary
-#            if show:
-#                im = cv2.resize(im_out, (1920, 1080))               
-#                cv2.imshow("frame", im)
-#                key = cv2.waitKey(1)
-#                if key & 0xFF == ord('q'):
-#                    break
-#                continue
+            # get next frame or None
+            out_im = frame.copy()
+            ret, frame = cap.read()
+            
+            # output frame if necessary
+            if show:
+                cv2.imshow("frame", cv2.resize(out_im, (1920,1080)))
+                key = cv2.waitKey(1)
+                if key & 0xFF == ord('q'):
+                    break
+                continue
+            
+
             
     # close all resources used      
     cap.release()
