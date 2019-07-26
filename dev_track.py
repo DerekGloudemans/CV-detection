@@ -36,26 +36,27 @@ def plot_windows(im,windows,show = True):
 if __name__ == "__main__":
     
     # set up a bunch of parameters
-    savenum = 0 # assign unique num to avoid overwriting as necessary
+    savenum = 10 # assign unique num to avoid overwriting as necessary
     show = True
     global wer # window expansion ratio
     wer = 5 
     
     # Kalman Filter variables
-    mod_err = 100
-    meas_err = 0.01
-    state_err = 1 
+    mod_err = 1
+    meas_err = 3
+    state_err = 1
     
     # tracking parameters
-    yolo_frequency = 10
+    yolo_frequency = 15
     fsld_max = 10
-    conf_threshold = 0.7
+    conf_threshold = 0.5
     window_expand = 0.25
-    iou_threshold = 0.3
+    iou_threshold = 0
    
     # relevant file paths
     video_file = '/media/worklab/data_HDD/cv_data/video/traffic_assorted/traffic_0.avi'
-    save_file = 'temp_{}.avi'.format(savenum)
+    intermediate_file = 'pipeline_files/inter_{}.avi'.format(savenum)
+    save_file = 'pipeline_files/_{}.avi'.format(savenum)
     splitnet_checkpoint = "/home/worklab/Documents/Checkpoints/splitnet_centered5_checkpoint_13.pt"
     
     # yolo files and parameters
@@ -123,6 +124,13 @@ if __name__ == "__main__":
     # get second frame
     ret, frame = cap.read()
     
+    # opens VideoWriter object for saving video file if necessary
+    if intermediate_file != None:
+        # open video_writer object
+        frame_width = int(cap.get(3))
+        frame_height = int(cap.get(4))
+        out = cv2.VideoWriter(intermediate_file,cv2.CAP_FFMPEG,cv2.VideoWriter_fourcc('H','2','6','4'), 30, (frame_width,frame_height))
+    
     ################ main loop    
     while cap.isOpened():
         
@@ -130,8 +138,8 @@ if __name__ == "__main__":
             
             
             # 1. predict new locations of all objects x_k | x_k-1
-#            for obj in active_objs:
-#                obj.predict()
+            for obj in active_objs:
+                obj.predict()
                 
             # 2. get new objects using either yolo or splitnet, depending on frame
             # in either case, locations holds states of current frame and second
@@ -149,6 +157,9 @@ if __name__ == "__main__":
                 detections = condense_detections(remove_duplicates(detections.cpu().unsqueeze(0).numpy()),style = "SORT_with_conf")    
                 second = detections[0]
                 second = second[:,:-1] # remove confidences
+            
+                matches = match_hungarian(locations,second,iou_cutoff = iou_threshold)        
+                #matches = match_greedy(locations,second)
             
             # use splitnet
             else:
@@ -168,6 +179,8 @@ if __name__ == "__main__":
                     x = location[0]
                     y = location[1]
                     s = location[2] + (cov[0]+cov[1]+cov[2]) * window_expand
+                    if s > 2000: # prevents from getting windows that are way too big
+                        s = 1000
                     r = location[3]
                     windows[i,0] = int(x - s*r/2)
                     windows[i,2] = int(x + s*r/2)
@@ -257,25 +270,28 @@ if __name__ == "__main__":
                     second[i,0] = (bbox[0] + bbox[2])/2 #x center
                     second[i,1] = (bbox[1] + bbox[3])/2 #y center
                     second[i,2] = (bbox[3] - bbox[1]) #s
-                    second[i,3] = (bbox[2] - bbox[0])/second[i,2] #r
+                    second[i,3] = (bbox[2] - bbox[0])/(second[i,2]+.001) #r
                     
 
                     
                 torch.cuda.empty_cache()
                 
                 # remove all detections with confidence below 50%
+                match_copy = matches.copy()
                 keep = []
                 for i in range(0,len(second)):
-                    if preds[i,1] > 0.5:
+                    if preds[i,1] > conf_threshold:
                         keep.append(i)
                 second = second[keep,:]
+                # shift matches so there are no matches for removed detections
+                removals = 0
+                for i in range(0,len(matches)):
+                    if i in keep:
+                        matches[i] = matches[i] - removals
+                    else:
+                        matches[i] = -1
+                        removals += 1
                 
-                
-                # match - technically we should know which detections correspond
-                # to the objects from which they were generated but this deals 
-                # with unmatched objects better
-                matches = match_hungarian(locations,second,iou_cutoff = iou_threshold)        
-                #matches = match_greedy(locations,second)
                 
                 # plot output bboxes on original image to verify correctness
                 if True:
@@ -311,6 +327,7 @@ if __name__ == "__main__":
                     new_obj.tags.append(1) # indicates object detected in this frame
                     active_objs.append(new_obj)
     
+                #TODO - supress new objects that are within some factor times the width of an existing object
             
             # move all necessary objects to inactive list
             move_to_inactive.sort()
@@ -326,14 +343,15 @@ if __name__ == "__main__":
             frame_num += 1
             print("FPS of the video is {:5.2f}".format( 1.0 / (time.time() - start)))
             start = time.time()
-
             
-             # save frame to file if necessary
-#            if save_file != None:
-#                out.write(im_out)
+            out_im = frame.copy()
+            
+            #save frame to file if necessary
+            if save_file != None:
+                out.write(out_im)
             
             # get next frame or None
-            out_im = frame.copy()
+
             ret, frame = cap.read()
             
             # output frame if necessary
@@ -366,10 +384,7 @@ if __name__ == "__main__":
         for i in range(0,len(obj.all)):
             points_array[i+first_frame,j*2] = obj.all[i][0]
             points_array[i+first_frame,(j*2)+1] = obj.all[i][1]
-            #points_array[i+first_frame,(j*4)+2] = obj.all[i][2]
-            #points_array[i+first_frame,(j*4)+3] = obj.all[i][3]
-            #points_array[i+first_frame,(j*5)+4] = obj.all[i][4]
      
     print("Detection finished")
 
-#draw_track(points_array,video_file, show = True, file_out = "temp1.avi", trail_size = 20)
+draw_track(points_array,intermediate_file, show = False, file_out = save_file, trail_size = 30)

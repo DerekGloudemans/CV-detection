@@ -317,13 +317,13 @@ class KF_Object():
 
         else:
             # initialize Kalman Filter to track object
-            self.kf = KalmanFilter(dim_x = 7, dim_z = 4)
-            self.kf.x = state[:7,:] # state
+            self.kf = KalmanFilter(dim_x = 6, dim_z = 4)
+            self.kf.x = state[:6,:] # state
             self.kf.P *= state_err # state error covariance matrix
-            self.kf.Q = np.identity(7)*mod_err # model error covariance matrix
+            self.kf.Q = np.identity(6)*mod_err # model error covariance matrix
             self.kf.R = np.identity(4)* meas_err # measurement error covariance matrix
-            self.kf.F = F[:7,:7]
-            self.kf.H = H[:,:7] 
+            self.kf.F = F[:6,:6]
+            self.kf.H = H[:,:6] 
             
         # scale errors in r and s so they are comparable to x and y
         self.kf.Q[2,2] = self.kf.Q[2,2] / 10
