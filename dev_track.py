@@ -27,7 +27,7 @@ def plot_windows(im,windows):
     #im =  cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
     for window in windows:
         im = cv2.rectangle(im,(int(window[0]),int(window[1])),(int(window[2]),int(window[3])),(155,155,0),2)
-    im = cv2.resize(im,(1620,1080))
+    im = cv2.resize(im,(1920,1080))
     cv2.imshow("frame",im)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
@@ -44,10 +44,10 @@ if __name__ == "__main__":
     state_err = 1 
     
     # tracking parameters
-    yolo_frequency = 15
+    yolo_frequency = 4
     fsld_max = 10
     conf_threshold = 0.7
-    
+    window_expand = 0.1625
    
     # relevant file paths
     video_file = '/media/worklab/data_HDD/cv_data/video/traffic_assorted/traffic_0.avi'
@@ -144,6 +144,7 @@ if __name__ == "__main__":
                 detections,_ = yolo.detect(frame, show = False, verbose = False)
                 detections = condense_detections(remove_duplicates(detections.cpu().unsqueeze(0).numpy()),style = "SORT_with_conf")    
                 second = detections[0]
+                second = second[:,:-1] # remove confidences
             
                 matches = match_hungarian(locations,second)        
                 #matches = match_greedy(locations,second)
@@ -151,7 +152,7 @@ if __name__ == "__main__":
             # use splitnet
             else:
                 # populate second with detections from splitnet
-                second = np.zeros([len(active_objs),5])
+                second = np.zeros([len(active_objs),4])
                 matches = [i for i in range(0,len(locations))]
                 windows = np.zeros([len(active_objs),4])
                 
@@ -164,7 +165,7 @@ if __name__ == "__main__":
                     cov = covs[i]
                     x = location[0]
                     y = location[1]
-                    s = location[2] + (cov[0]+cov[1]+cov[2])/8
+                    s = location[2] + (cov[0]+cov[1]+cov[2]) * window_expand
                     r = location[3]
                     windows[i,0] = int(x - s*r/2)
                     windows[i,2] = int(x + s*r/2)
@@ -172,7 +173,7 @@ if __name__ == "__main__":
                     windows[i,3] = int(y + s/2)
                     
                 # 2b. plot windows on the original image to check
-                if True:
+                if False:
                     plot_windows(frame.copy(),windows)
                 
                 #2c. crop these into tensors, scale and normalize, etc.
@@ -199,14 +200,14 @@ if __name__ == "__main__":
                         diff = width - height
                         # padding (left, top, right, bottom)\
                         top_padding = int(diff/2+diff%2)
-                        transform_params[i,0] = top_padding # save for untransform later
+                        transform_params[i,1] = top_padding # save for untransform later
                         padding = (0,top_padding,0,int(diff/2))
                     elif height == width:
                         padding = 0
                     else:
                         diff = height - width
                         left_padding = int(diff/2+diff%2)
-                        transform_params[i,1] = left_padding # save for untransform later
+                        transform_params[i,0] = left_padding # save for untransform later
                         padding = (left_padding,0,int(diff/2),0)
                     
                     pad_im = TF.pad(crop_im, padding, fill=0, padding_mode='constant')
@@ -221,7 +222,7 @@ if __name__ == "__main__":
                 ims = ims.to(device)
                 
                 # 2d. use the batch_plot to show these tensors, verifying they match up
-                if True:
+                if False:
                     plot_batch(splitnet,ims)
                 
                 # TODO - 2e. pass batch to splitnet
@@ -240,16 +241,21 @@ if __name__ == "__main__":
                     bbox = (bbox * transform_params[i,2]/224).astype(int)
                     
                     # undo pad and crop
-                    bbox[0] = bbox[0] + transform_params[i,0] + windows[i,0]
-                    bbox[1] = bbox[1] + transform_params[i,1] + windows[i,1]
-                    bbox[2] = bbox[2] + transform_params[i,0] + windows[i,0]
-                    bbox[3] = bbox[3] + transform_params[i,1] + windows[i,1]
+                    bbox[0] = bbox[0] - transform_params[i,0] + windows[i,0]
+                    bbox[1] = bbox[1] - transform_params[i,1] + windows[i,1]
+                    bbox[2] = bbox[2] - transform_params[i,0] + windows[i,0]
+                    bbox[3] = bbox[3] - transform_params[i,1] + windows[i,1]
                     new_windows[i] = bbox
                     
-                # TODO - plot output bboxes on original image to verify correctness
-                plot_windows(frame.copy(),new_windows)
-                # TODO - transform into state
-                # TODO - parse results
+                    # convert back into state for second frame
+                    second[i,0] = (bbox[0] + bbox[2])/2 #x center
+                    second[i,1] = (bbox[1] + bbox[3])/2 #y center
+                    second[i,2] = (bbox[3] - bbox[1]) #s
+                    second[i,3] = (bbox[2] - bbox[0])/second[i,2] #r
+                     
+                # plot output bboxes on original image to verify correctness
+                if False:
+                    plot_windows(frame.copy(),new_windows)
                 
                
             # 3. traverse object list
