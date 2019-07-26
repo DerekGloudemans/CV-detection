@@ -36,7 +36,7 @@ def plot_windows(im,windows,show = True):
 if __name__ == "__main__":
     
     # set up a bunch of parameters
-    savenum = 10 # assign unique num to avoid overwriting as necessary
+    savenum = 11 # assign unique num to avoid overwriting as necessary
     show = True
     global wer # window expansion ratio
     wer = 5 
@@ -51,12 +51,13 @@ if __name__ == "__main__":
     fsld_max = 10
     conf_threshold = 0.5
     window_expand = 0.25
-    iou_threshold = 0
+    iou_threshold = 0.3
+    proximity_threshold = 0.5
    
     # relevant file paths
     video_file = '/media/worklab/data_HDD/cv_data/video/traffic_assorted/traffic_0.avi'
     intermediate_file = 'pipeline_files/inter_{}.avi'.format(savenum)
-    save_file = 'pipeline_files/_{}.avi'.format(savenum)
+    save_file = 'pipeline_files/track_{}.avi'.format(savenum)
     splitnet_checkpoint = "/home/worklab/Documents/Checkpoints/splitnet_centered5_checkpoint_13.pt"
     
     # yolo files and parameters
@@ -322,12 +323,22 @@ if __name__ == "__main__":
             # for all unmatched objects, intialize new object
             for j in range(0,len(second)):
                 if j not in matches:
-                    new_obj = KF_Object(second[j],frame_num,mod_err,meas_err,state_err)
-                    new_obj.all.append(new_obj.get_coords())
-                    new_obj.tags.append(1) # indicates object detected in this frame
-                    active_objs.append(new_obj)
-    
-                #TODO - supress new objects that are within some factor times the width of an existing object
+                    
+                    # supress new objects too close to an existing object
+                    add = True
+                    for obj in active_objs:
+                        coords = obj.get_coords()
+                        dist = np.sqrt((second[j,0] - coords[0])**2 + (second[j,1] - coords[1])**2)
+                        if dist < coords[2]*proximity_threshold:
+                            add = False
+                            print("Supressed!")
+                            break
+                        
+                    if add:
+                        new_obj = KF_Object(second[j],frame_num,mod_err,meas_err,state_err)
+                        new_obj.all.append(new_obj.get_coords())
+                        new_obj.tags.append(1) # indicates object detected in this frame
+                        active_objs.append(new_obj)
             
             # move all necessary objects to inactive list
             move_to_inactive.sort()
