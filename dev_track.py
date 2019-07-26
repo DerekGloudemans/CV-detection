@@ -47,7 +47,8 @@ if __name__ == "__main__":
     yolo_frequency = 4
     fsld_max = 10
     conf_threshold = 0.7
-    window_expand = 0.1625
+    window_expand = 0.3
+    iou_threshold = 0.3
    
     # relevant file paths
     video_file = '/media/worklab/data_HDD/cv_data/video/traffic_assorted/traffic_0.avi'
@@ -126,8 +127,8 @@ if __name__ == "__main__":
             
             
             # 1. predict new locations of all objects x_k | x_k-1
-            for obj in active_objs:
-                obj.predict()
+#            for obj in active_objs:
+#                obj.predict()
                 
             # 2. get new objects using either yolo or splitnet, depending on frame
             # in either case, locations holds states of current frame and second
@@ -146,7 +147,7 @@ if __name__ == "__main__":
                 second = detections[0]
                 second = second[:,:-1] # remove confidences
             
-                matches = match_hungarian(locations,second)        
+                matches = match_hungarian(locations,second,iou_cutoff = iou_threshold)        
                 #matches = match_greedy(locations,second)
             
             # use splitnet
@@ -254,7 +255,7 @@ if __name__ == "__main__":
                     second[i,3] = (bbox[2] - bbox[0])/second[i,2] #r
                      
                 # plot output bboxes on original image to verify correctness
-                if False:
+                if True:
                     plot_windows(frame.copy(),new_windows)
                 
                
