@@ -72,6 +72,7 @@ if __name__ == "__main__":
     
     # enable CUDA
     use_cuda = torch.cuda.is_available()
+    #use_cuda = False
     device = torch.device("cuda:0" if use_cuda else "cpu")
     torch.cuda.empty_cache()
     
@@ -244,11 +245,25 @@ if __name__ == "__main__":
                 # TODO - 2e. pass batch to splitnet
                 try:
                     cls_outs, reg_out = splitnet(ims)
-                except RuntimeError:
-                    print("Divide batch so CUDA does not run out of memory")
+                    bboxes = reg_out.data.cpu().numpy()
+                    preds = cls_outs.data.cpu().numpy()
 
-                bboxes = reg_out.data.cpu().numpy()
-                preds = cls_outs.data.cpu().numpy()
+                except RuntimeError:
+                    # too many windows to fit in GPU memory at once, divide into smaller batches
+                    batch_size = 32
+                    bboxes = []
+                    preds = []
+                    for i in range(0,len(ims)//batch_size + 1):
+                        if len(ims) - i*batch_size == 0 :
+                            continue
+                        elif len(ims) - i*batch_size < batch_size: # last batch, incomplete
+                            cls_outs,reg_out = splitnet(ims[i*batch_size:len(ims),:,:,:])
+                        else:
+                            cls_outs,reg_out = splitnet(ims[i*batch_size:i*batch_size + batch_size,:,:,:]) 
+                        bboxes.append(reg_out.data.cpu().numpy())
+                        preds.append(cls_outs.data.cpu().numpy())
+                    bboxes = np.concatenate(bboxes)
+                    preds = np.concatenate(preds)
     
                 # TODO - 2f. parse back into global image 
                 new_windows = np.zeros([len(windows),4])
@@ -285,8 +300,8 @@ if __name__ == "__main__":
 #                                preds[i,0] = 1
                     
                 torch.cuda.empty_cache()
-                
-                # non-maximal supression
+                    
+                # non-maximal supression - not necessary for yolo because yolo already does this
                 for i in range(0,len(second)):
                     for j in range(i+1, len(second)):
                         x1_left  = second[i][0] - second[i][2]*second[i][3]/2
@@ -331,15 +346,10 @@ if __name__ == "__main__":
                     else:
                         matches[i] = -1
                         removals += 1
-                
-
-                
-                
-                # plot output bboxes on original image to verify correctness
+                                # plot output bboxes on original image to verify correctness
                 if True:
-                    plot_windows(frame,new_windows,show = not(show))
+                    plot_windows(frame,new_windows[keep,:],show = not(show))
                 
-               
             # 3. traverse object list
             move_to_inactive = []
             for i in range(0,len(active_objs)):
@@ -364,23 +374,10 @@ if __name__ == "__main__":
             # for all unmatched objects, intialize new object
             for j in range(0,len(second)):
                 if j not in matches:
-#                    
-#                    # this block is in lieu of NMS, so should be removed once NMS is implemented
-#                    # supress new objects too close to an existing object
-#                    add = True
-#                    for obj in active_objs:
-#                        coords = obj.get_coords()
-#                        dist = np.sqrt((second[j,0] - coords[0])**2 + (second[j,1] - coords[1])**2)
-#                        if dist < coords[2]*nms_threshold:
-#                            add = False
-#                            print("Supressed!")
-#                            break
-#                        
-#                    if add:
-                        new_obj = KF_Object(second[j],frame_num,mod_err,meas_err,state_err)
-                        new_obj.all.append(new_obj.get_coords())
-                        new_obj.tags.append(1) # indicates object detected in this frame
-                        active_objs.append(new_obj)
+                    new_obj = KF_Object(second[j],frame_num,mod_err,meas_err,state_err)
+                    new_obj.all.append(new_obj.get_coords())
+                    new_obj.tags.append(1) # indicates object detected in this frame
+                    active_objs.append(new_obj)
             
             # move all necessary objects to inactive list
             move_to_inactive.sort()
