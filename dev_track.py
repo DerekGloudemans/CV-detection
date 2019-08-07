@@ -17,6 +17,8 @@ from util_transform import get_best_transform, transform_pt_array, velocities_fr
 from util_draw import draw_world, draw_track, draw_track_world
 import time
 
+from video_to_images import ImDirectoryReader
+
 def plot_windows(im,windows,show = True):
     """
     plots rectangular windows on a CV2 image.
@@ -76,7 +78,7 @@ def get_objs_matches_splitnet(splitnet,locations,frame,nms_threshold = 0.3 ,conf
         plot_windows(frame.copy(),windows)
     
     #2c. crop these into tensors, scale and normalize, etc.
-    pil_im = Image.fromarray(frame)
+    pil_im = Image.fromarray(cv2.cvtColor(frame,cv2.COLOR_BGR2RGB))
 
     # define transforms
     transform = transforms.Compose([\
@@ -240,11 +242,11 @@ if __name__ == "__main__":
     
     # tracking parameters
     yolo_frequency = 15 # frames between yolo frames + 1
-    fsld_max = 10 # max # of frames an object can go undetected before it is removed
-    conf_threshold = 0.5 # all detections with lower confidence are removed
+    fsld_max = 30 # max # of frames an object can go undetected before it is removed
+    conf_threshold = 0.4 # all detections with lower confidence are removed
     window_expand = 0.25 # window expansion from current state estimate at each frame
-    min_matching_overlap = 0.3 # lower overlap will result in two detections not being matched
-    nms_threshold = 0.3 # higher iou will result in lower confidence splitnet detection being supressed
+    min_matching_overlap = 0.1 # lower overlap will result in two detections not being matched
+    nms_threshold = 0.5 # higher iou will result in lower confidence splitnet detection being supressed
    
     # relevant file paths
     video_file = '/media/worklab/data_HDD/cv_data/video/traffic_assorted/traffic_0.avi'
@@ -289,8 +291,9 @@ if __name__ == "__main__":
 
     # open up a videocapture object
     cap = cv2.VideoCapture(video_file)
+    
     # verify file is opened
-    assert cap.isOpened(), "Cannot open file \"{}\"".format(video_file)
+    assert cap.isOpened(), "Cannot open file \"{}\"".format(video_file)        
     
     start = time.time()
     frame_num = 0
@@ -399,7 +402,7 @@ if __name__ == "__main__":
             out_im = frame.copy()
             
             #save frame to file if necessary
-            if save_file != None:
+            if intermediate_file != None:
                 out.write(out_im)
             
             # get next frame or None
