@@ -52,7 +52,7 @@ if __name__ == "__main__":
     conf_threshold = 0.5
     window_expand = 0.25
     iou_threshold = 0.3
-    proximity_threshold = 0.5
+    nms_threshold = 0.3
    
     # relevant file paths
     video_file = '/media/worklab/data_HDD/cv_data/video/traffic_assorted/traffic_0.avi'
@@ -274,10 +274,49 @@ if __name__ == "__main__":
                     second[i,3] = (bbox[2] - bbox[0])/(second[i,2]+.001) #r
                     
 
+#                        iou = intersection / (a1+a2-intersection)
+#                        if iou > nms_threshold: # need to remove a bbox
+#                            if preds[i,1] > preds[j,1]:
+#                                #remove bbox j
+#                                preds[j,1] = 0
+#                                preds[j,0] = 1
+#                            else:
+#                                preds[i,1] = 0
+#                                preds[i,0] = 1
                     
                 torch.cuda.empty_cache()
                 
-                # remove all detections with confidence below 50%
+                # non-maximal supression
+                for i in range(0,len(second)):
+                    for j in range(i+1, len(second)):
+                        x1_left  = second[i][0] - second[i][2]*second[i][3]/2
+                        x2_left  = second[j][0] - second[j][2]*second[j][3]/2
+                        x1_right = second[i][0] + second[i][2]*second[i][3]/2
+                        x2_right = second[j][0] + second[j][2]*second[j][3]/2
+                        x_intersection = min(x1_right,x2_right) - max(x1_left,x2_left) 
+                        
+                        y1_left  = second[i][1] - second[i][2]/2.0
+                        y2_left  = second[j][1] - second[j][2]/2.0
+                        y1_right = second[i][1] + second[i][2]/2.0
+                        y2_right = second[j][1] + second[j][2]/2.0
+                        y_intersection = min(y1_right,y2_right) - max(y1_left,y2_left)
+                        
+                        a1 = second[i,3] * second[i,2]**2 
+                        a2 = second[j,3] * second[j,2]**2 
+                        intersection = x_intersection*y_intersection
+                         
+                        iou = intersection / (a1+a2-intersection)
+                        if iou > nms_threshold:
+                            if preds[i,1] > preds[j,1]:
+                                # remove second[j]
+                                preds[j,1] = 0
+                                preds[j,0] = 1
+                            else:
+                                # remove second[i]
+                                preds[i,1] = 0
+                                preds[i,0] = 1
+                                
+                # remove all detections with confidence below threshold
                 match_copy = matches.copy()
                 keep = []
                 for i in range(0,len(second)):
@@ -292,6 +331,8 @@ if __name__ == "__main__":
                     else:
                         matches[i] = -1
                         removals += 1
+                
+
                 
                 
                 # plot output bboxes on original image to verify correctness
@@ -323,18 +364,19 @@ if __name__ == "__main__":
             # for all unmatched objects, intialize new object
             for j in range(0,len(second)):
                 if j not in matches:
-                    
-                    # supress new objects too close to an existing object
-                    add = True
-                    for obj in active_objs:
-                        coords = obj.get_coords()
-                        dist = np.sqrt((second[j,0] - coords[0])**2 + (second[j,1] - coords[1])**2)
-                        if dist < coords[2]*proximity_threshold:
-                            add = False
-                            print("Supressed!")
-                            break
-                        
-                    if add:
+#                    
+#                    # this block is in lieu of NMS, so should be removed once NMS is implemented
+#                    # supress new objects too close to an existing object
+#                    add = True
+#                    for obj in active_objs:
+#                        coords = obj.get_coords()
+#                        dist = np.sqrt((second[j,0] - coords[0])**2 + (second[j,1] - coords[1])**2)
+#                        if dist < coords[2]*nms_threshold:
+#                            add = False
+#                            print("Supressed!")
+#                            break
+#                        
+#                    if add:
                         new_obj = KF_Object(second[j],frame_num,mod_err,meas_err,state_err)
                         new_obj.all.append(new_obj.get_coords())
                         new_obj.tags.append(1) # indicates object detected in this frame
