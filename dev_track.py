@@ -32,13 +32,192 @@ def plot_windows(im,windows,show = True):
         cv2.imshow("frame",im)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+        
+def get_objs_matches_splitnet(splitnet,locations,nms_threshold = 0.3 ,conf_threshold = 0.5 , show = False):
+    # populate second with detections from splitnet
+    second = np.zeros([len(active_objs),4])
+    windows = np.zeros([len(active_objs),4])
+    
+    matches = [i for i in range(0,len(locations))]
+    
+    # will hold left_pad, top_pad, and scale factor for each object
+    transform_params = np.zeros([len(active_objs),3])
+    
+    # 2a. for each object, generate window to search in
+    for i in range(0, len(locations)):
+        location = locations[i]
+        cov = covs[i]
+        x = location[0]
+        y = location[1]
+        s = location[2] + (cov[0]+cov[1]+cov[2]) * window_expand
+        if s > 2000: # prevents from getting windows that are way too big
+            s = 1000
+        r = location[3]
+        windows[i,0] = int(x - s*r/2)
+        windows[i,2] = int(x + s*r/2)
+        windows[i,1] = int(y - s/2)
+        windows[i,3] = int(y + s/2)
+        
+    # 2b. plot windows on the original image to check
+    if False:
+        plot_windows(frame.copy(),windows)
+    
+    #2c. crop these into tensors, scale and normalize, etc.
+    pil_im = Image.fromarray(frame)
 
+    # define transforms
+    transform = transforms.Compose([\
+        transforms.Resize((224,224)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ])
+
+    ims = []
+    for i,window in enumerate(windows):
+        # crop
+        del_x = window[2]-window[0]
+        del_y = window[3]-window[1]
+        crop_im = TF.crop(pil_im,window[1],window[0],del_y,del_x)
+        
+        # generate pad to make square (alternatively, make a square window)
+        height = crop_im.size[1]
+        width = crop_im.size[0]
+        if height < width:
+            diff = width - height
+            # padding (left, top, right, bottom)\
+            top_padding = int(diff/2+diff%2)
+            transform_params[i,1] = top_padding # save for untransform later
+            padding = (0,top_padding,0,int(diff/2))
+        elif height == width:
+            padding = 0
+        else:
+            diff = height - width
+            left_padding = int(diff/2+diff%2)
+            transform_params[i,0] = left_padding # save for untransform later
+            padding = (left_padding,0,int(diff/2),0)
+        
+        pad_im = TF.pad(crop_im, padding, fill=0, padding_mode='constant')
+                            
+        # scale, normalize and convert to tensor
+        transform_params[i,2] = pad_im.size[0]
+        im = transform(pad_im)
+        ims.append(im)
+       
+    # convert all images to a single tensor     
+    ims = torch.stack(ims)
+    ims = ims.to(device)
+    
+    # 2d. use the batch_plot to show these tensors, verifying they match up
+    if False:
+        plot_batch(splitnet,ims)
+    
+    # TODO - 2e. pass batch to splitnet
+    try:
+        cls_outs, reg_out = splitnet(ims)
+        bboxes = reg_out.data.cpu().numpy()
+        preds = cls_outs.data.cpu().numpy()
+
+    except RuntimeError:
+        # too many windows to fit in GPU memory at once, divide into smaller batches
+        batch_size = 32
+        bboxes = []
+        preds = []
+        for i in range(0,len(ims)//batch_size + 1):
+            if len(ims) - i*batch_size == 0 :
+                continue
+            elif len(ims) - i*batch_size < batch_size: # last batch, incomplete
+                cls_outs,reg_out = splitnet(ims[i*batch_size:len(ims),:,:,:])
+            else:
+                cls_outs,reg_out = splitnet(ims[i*batch_size:i*batch_size + batch_size,:,:,:]) 
+            bboxes.append(reg_out.data.cpu().numpy())
+            preds.append(cls_outs.data.cpu().numpy())
+        bboxes = np.concatenate(bboxes)
+        preds = np.concatenate(preds)
+
+    # TODO - 2f. parse back into global image 
+    new_windows = np.zeros([len(windows),4])
+    for i in range(0,len(bboxes)):
+
+        # transform bbox coords back into im pixel coords
+        bbox = (bboxes[i]* 224*wer - 224*(wer-1)/2).astype(int)
+        
+        # undo scale
+        bbox = (bbox * transform_params[i,2]/224).astype(int)
+        
+        # undo pad and crop
+        bbox[0] = bbox[0] - transform_params[i,0] + windows[i,0]
+        bbox[1] = bbox[1] - transform_params[i,1] + windows[i,1]
+        bbox[2] = bbox[2] - transform_params[i,0] + windows[i,0]
+        bbox[3] = bbox[3] - transform_params[i,1] + windows[i,1]
+        new_windows[i] = bbox
+        
+        # convert back into state for second frame
+        second[i,0] = (bbox[0] + bbox[2])/2 #x center
+        second[i,1] = (bbox[1] + bbox[3])/2 #y center
+        second[i,2] = (bbox[3] - bbox[1]) #s
+        second[i,3] = (bbox[2] - bbox[0])/(second[i,2]+.001) #r
+        
+    torch.cuda.empty_cache()
+        
+    # non-maximal supression - not necessary for yolo because yolo already does this
+    for i in range(0,len(second)):
+        for j in range(i+1, len(second)):
+            x1_left  = second[i][0] - second[i][2]*second[i][3]/2
+            x2_left  = second[j][0] - second[j][2]*second[j][3]/2
+            x1_right = second[i][0] + second[i][2]*second[i][3]/2
+            x2_right = second[j][0] + second[j][2]*second[j][3]/2
+            x_intersection = min(x1_right,x2_right) - max(x1_left,x2_left) 
+            
+            y1_left  = second[i][1] - second[i][2]/2.0
+            y2_left  = second[j][1] - second[j][2]/2.0
+            y1_right = second[i][1] + second[i][2]/2.0
+            y2_right = second[j][1] + second[j][2]/2.0
+            y_intersection = min(y1_right,y2_right) - max(y1_left,y2_left)
+            
+            a1 = second[i,3] * second[i,2]**2 
+            a2 = second[j,3] * second[j,2]**2 
+            intersection = x_intersection*y_intersection
+             
+            iou = intersection / (a1+a2-intersection)
+            if iou > nms_threshold:
+                if preds[i,1] > preds[j,1]:
+                    # remove second[j]
+                    preds[j,1] = 0
+                    preds[j,0] = 1
+                else:
+                    # remove second[i]
+                    preds[i,1] = 0
+                    preds[i,0] = 1
+                    
+    # remove all detections with confidence below threshold
+    keep = []
+    for i in range(0,len(second)):
+        if preds[i,1] > conf_threshold:
+            keep.append(i)
+    second = second[keep,:]
+    # shift matches so there are no matches for removed detections
+    removals = 0
+    for i in range(0,len(matches)):
+        if i in keep:
+            matches[i] = matches[i] - removals
+        else:
+            matches[i] = -1
+            removals += 1
+                    # plot output bboxes on original image to verify correctness
+    if True:
+        # show = not(show) prevents window from being plotted twice if it will
+        # already be shown later in pipeline
+        plot_windows(frame,new_windows[keep,:],show = not(show))    
+    
+    return matches, second
+
+    
 if __name__ == "__main__":
     
     # set up a bunch of parameters
-    savenum = 11 # assign unique num to avoid overwriting as necessary
+    savenum = 0 # assign unique num to avoid overwriting as necessary
     show = True
-    global wer # window expansion ratio
+    global wer # window expansion ratio, also used in parallel_regression_classification.py
     wer = 5 
     
     # Kalman Filter variables
@@ -47,12 +226,12 @@ if __name__ == "__main__":
     state_err = 1
     
     # tracking parameters
-    yolo_frequency = 15
-    fsld_max = 10
-    conf_threshold = 0.5
-    window_expand = 0.25
-    iou_threshold = 0.3
-    nms_threshold = 0.3
+    yolo_frequency = 15 # frames between yolo frames + 1
+    fsld_max = 10 # max # of frames an object can go undetected before it is removed
+    conf_threshold = 0.5 # all detections with lower confidence are removed
+    window_expand = 0.25 # window expansion from current state estimate at each frame
+    min_matching_overlap = 0.3 # lower overlap will result in two detections not being matched
+    nms_threshold = 0.3 # higher iou will result in lower confidence splitnet detection being supressed
    
     # relevant file paths
     video_file = '/media/worklab/data_HDD/cv_data/video/traffic_assorted/traffic_0.avi'
@@ -137,13 +316,11 @@ if __name__ == "__main__":
     while cap.isOpened():
         
         if ret:
-            
-            
-            # 1. predict new locations of all objects x_k | x_k-1
+            ## 1. predict new locations of all objects x_k | x_k-1
             for obj in active_objs:
                 obj.predict()
                 
-            # 2. get new objects using either yolo or splitnet, depending on frame
+            ## 2. get new objects using either yolo or splitnet, depending on frame
             # in either case, locations holds states of current frame and second
             # holds states of next frame
             # object locations according to KF
@@ -152,205 +329,20 @@ if __name__ == "__main__":
             covs = np.zeros([len(active_objs),4])
             for i,obj in enumerate(active_objs):
                 locations[i,:],covs[i,:] = obj.get_xysr_cov()
-            
+                
             # use yolo
             if frame_num % yolo_frequency == 0:
                 detections,_ = yolo.detect(frame, show = False, verbose = False)
                 detections = condense_detections(remove_duplicates(detections.cpu().unsqueeze(0).numpy()),style = "SORT_with_conf")    
                 second = detections[0]
-                second = second[:,:-1] # remove confidences
-            
-                matches = match_hungarian(locations,second,iou_cutoff = iou_threshold)        
-                #matches = match_greedy(locations,second)
-            
+                second = second[:,:-1] # remove confidences            
+                matches = match_hungarian(locations,second,iou_cutoff = min_matching_overlap)        
             # use splitnet
             else:
-                # populate second with detections from splitnet
-                second = np.zeros([len(active_objs),4])
-                windows = np.zeros([len(active_objs),4])
-                
-                matches = [i for i in range(0,len(locations))]
-                
-                # will hold left_pad, top_pad, and scale factor for each object
-                transform_params = np.zeros([len(active_objs),3])
-                
-                # 2a. for each object, generate window to search in
-                for i in range(0, len(locations)):
-                    location = locations[i]
-                    cov = covs[i]
-                    x = location[0]
-                    y = location[1]
-                    s = location[2] + (cov[0]+cov[1]+cov[2]) * window_expand
-                    if s > 2000: # prevents from getting windows that are way too big
-                        s = 1000
-                    r = location[3]
-                    windows[i,0] = int(x - s*r/2)
-                    windows[i,2] = int(x + s*r/2)
-                    windows[i,1] = int(y - s/2)
-                    windows[i,3] = int(y + s/2)
-                    
-                # 2b. plot windows on the original image to check
-                if False:
-                    plot_windows(frame.copy(),windows)
-                
-                #2c. crop these into tensors, scale and normalize, etc.
-                pil_im = Image.fromarray(frame)
+                matches, second = get_objs_matches_splitnet(splitnet,locations,nms_threshold,conf_threshold,show = show)
 
-                # define transforms
-                transform = transforms.Compose([\
-                    transforms.Resize((224,224)),
-                    transforms.ToTensor(),
-                    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-                    ])
-    
-                ims = []
-                for i,window in enumerate(windows):
-                    # crop
-                    del_x = window[2]-window[0]
-                    del_y = window[3]-window[1]
-                    crop_im = TF.crop(pil_im,window[1],window[0],del_y,del_x)
-                    
-                    # generate pad to make square (alternatively, make a square window)
-                    height = crop_im.size[1]
-                    width = crop_im.size[0]
-                    if height < width:
-                        diff = width - height
-                        # padding (left, top, right, bottom)\
-                        top_padding = int(diff/2+diff%2)
-                        transform_params[i,1] = top_padding # save for untransform later
-                        padding = (0,top_padding,0,int(diff/2))
-                    elif height == width:
-                        padding = 0
-                    else:
-                        diff = height - width
-                        left_padding = int(diff/2+diff%2)
-                        transform_params[i,0] = left_padding # save for untransform later
-                        padding = (left_padding,0,int(diff/2),0)
-                    
-                    pad_im = TF.pad(crop_im, padding, fill=0, padding_mode='constant')
-                                        
-                    # scale, normalize and convert to tensor
-                    transform_params[i,2] = pad_im.size[0]
-                    im = transform(pad_im)
-                    ims.append(im)
-                   
-                # convert all images to a single tensor     
-                ims = torch.stack(ims)
-                ims = ims.to(device)
                 
-                # 2d. use the batch_plot to show these tensors, verifying they match up
-                if False:
-                    plot_batch(splitnet,ims)
-                
-                # TODO - 2e. pass batch to splitnet
-                try:
-                    cls_outs, reg_out = splitnet(ims)
-                    bboxes = reg_out.data.cpu().numpy()
-                    preds = cls_outs.data.cpu().numpy()
-
-                except RuntimeError:
-                    # too many windows to fit in GPU memory at once, divide into smaller batches
-                    batch_size = 32
-                    bboxes = []
-                    preds = []
-                    for i in range(0,len(ims)//batch_size + 1):
-                        if len(ims) - i*batch_size == 0 :
-                            continue
-                        elif len(ims) - i*batch_size < batch_size: # last batch, incomplete
-                            cls_outs,reg_out = splitnet(ims[i*batch_size:len(ims),:,:,:])
-                        else:
-                            cls_outs,reg_out = splitnet(ims[i*batch_size:i*batch_size + batch_size,:,:,:]) 
-                        bboxes.append(reg_out.data.cpu().numpy())
-                        preds.append(cls_outs.data.cpu().numpy())
-                    bboxes = np.concatenate(bboxes)
-                    preds = np.concatenate(preds)
-    
-                # TODO - 2f. parse back into global image 
-                new_windows = np.zeros([len(windows),4])
-                for i in range(0,len(bboxes)):
-        
-                    # transform bbox coords back into im pixel coords
-                    bbox = (bboxes[i]* 224*wer - 224*(wer-1)/2).astype(int)
-                    
-                    # undo scale
-                    bbox = (bbox * transform_params[i,2]/224).astype(int)
-                    
-                    # undo pad and crop
-                    bbox[0] = bbox[0] - transform_params[i,0] + windows[i,0]
-                    bbox[1] = bbox[1] - transform_params[i,1] + windows[i,1]
-                    bbox[2] = bbox[2] - transform_params[i,0] + windows[i,0]
-                    bbox[3] = bbox[3] - transform_params[i,1] + windows[i,1]
-                    new_windows[i] = bbox
-                    
-                    # convert back into state for second frame
-                    second[i,0] = (bbox[0] + bbox[2])/2 #x center
-                    second[i,1] = (bbox[1] + bbox[3])/2 #y center
-                    second[i,2] = (bbox[3] - bbox[1]) #s
-                    second[i,3] = (bbox[2] - bbox[0])/(second[i,2]+.001) #r
-                    
-
-#                        iou = intersection / (a1+a2-intersection)
-#                        if iou > nms_threshold: # need to remove a bbox
-#                            if preds[i,1] > preds[j,1]:
-#                                #remove bbox j
-#                                preds[j,1] = 0
-#                                preds[j,0] = 1
-#                            else:
-#                                preds[i,1] = 0
-#                                preds[i,0] = 1
-                    
-                torch.cuda.empty_cache()
-                    
-                # non-maximal supression - not necessary for yolo because yolo already does this
-                for i in range(0,len(second)):
-                    for j in range(i+1, len(second)):
-                        x1_left  = second[i][0] - second[i][2]*second[i][3]/2
-                        x2_left  = second[j][0] - second[j][2]*second[j][3]/2
-                        x1_right = second[i][0] + second[i][2]*second[i][3]/2
-                        x2_right = second[j][0] + second[j][2]*second[j][3]/2
-                        x_intersection = min(x1_right,x2_right) - max(x1_left,x2_left) 
-                        
-                        y1_left  = second[i][1] - second[i][2]/2.0
-                        y2_left  = second[j][1] - second[j][2]/2.0
-                        y1_right = second[i][1] + second[i][2]/2.0
-                        y2_right = second[j][1] + second[j][2]/2.0
-                        y_intersection = min(y1_right,y2_right) - max(y1_left,y2_left)
-                        
-                        a1 = second[i,3] * second[i,2]**2 
-                        a2 = second[j,3] * second[j,2]**2 
-                        intersection = x_intersection*y_intersection
-                         
-                        iou = intersection / (a1+a2-intersection)
-                        if iou > nms_threshold:
-                            if preds[i,1] > preds[j,1]:
-                                # remove second[j]
-                                preds[j,1] = 0
-                                preds[j,0] = 1
-                            else:
-                                # remove second[i]
-                                preds[i,1] = 0
-                                preds[i,0] = 1
-                                
-                # remove all detections with confidence below threshold
-                match_copy = matches.copy()
-                keep = []
-                for i in range(0,len(second)):
-                    if preds[i,1] > conf_threshold:
-                        keep.append(i)
-                second = second[keep,:]
-                # shift matches so there are no matches for removed detections
-                removals = 0
-                for i in range(0,len(matches)):
-                    if i in keep:
-                        matches[i] = matches[i] - removals
-                    else:
-                        matches[i] = -1
-                        removals += 1
-                                # plot output bboxes on original image to verify correctness
-                if True:
-                    plot_windows(frame,new_windows[keep,:],show = not(show))
-                
-            # 3. traverse object list
+            ## 3. traverse object list
             move_to_inactive = []
             for i in range(0,len(active_objs)):
                 obj = active_objs[i]
@@ -386,10 +378,7 @@ if __name__ == "__main__":
                 inactive_objs.append(active_objs[idx])
                 del active_objs[idx]
             
-            
-            
-            
-            #summary statistics
+            # summary statistics
             frame_num += 1
             print("FPS of the video is {:5.2f}".format( 1.0 / (time.time() - start)))
             start = time.time()
@@ -401,7 +390,6 @@ if __name__ == "__main__":
                 out.write(out_im)
             
             # get next frame or None
-
             ret, frame = cap.read()
             
             # output frame if necessary
@@ -411,9 +399,7 @@ if __name__ == "__main__":
                 if key & 0xFF == ord('q'):
                     break
                 continue
-            
-
-            
+                        
     # close all resources used      
     cap.release()
     cv2.destroyAllWindows()
