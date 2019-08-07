@@ -33,7 +33,20 @@ def plot_windows(im,windows,show = True):
         cv2.waitKey(0)
         cv2.destroyAllWindows()
         
-def get_objs_matches_splitnet(splitnet,locations,nms_threshold = 0.3 ,conf_threshold = 0.5 , show = False):
+def get_objs_matches_splitnet(splitnet,locations,frame,nms_threshold = 0.3 ,conf_threshold = 0.5 , show = False):
+    """
+    returns objects and matches to previous frame given frame and previous locations
+    splitnet - SplitNet object
+    locations - n x 4 numpy array in xysr form
+    frame - CV image
+    nms_threshold - max iou before overlapping detections are suppressed
+    conf_threshold - min confidence before detections are classified as negatives
+    
+    returns - 
+    second - n x 4 numpy array in xysr form of object positions in frame
+    matches - length n list of matches where val at index i indicates which object in frame 
+              corresponds to object i in previous frame
+    """
     # populate second with detections from splitnet
     second = np.zeros([len(active_objs),4])
     windows = np.zeros([len(active_objs),4])
@@ -339,7 +352,7 @@ if __name__ == "__main__":
                 matches = match_hungarian(locations,second,iou_cutoff = min_matching_overlap)        
             # use splitnet
             else:
-                matches, second = get_objs_matches_splitnet(splitnet,locations,nms_threshold,conf_threshold,show = show)
+                matches, second = get_objs_matches_splitnet(splitnet,locations,frame,nms_threshold,conf_threshold,show = show)
 
                 
             ## 3. traverse object list
