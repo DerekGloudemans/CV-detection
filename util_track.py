@@ -29,10 +29,9 @@ def condense_detections(detections,style = "center"):
     style "SORT" - centroid x, centroid y, scale (height) and ratio (width/height)
     style "SORT_with_conf" - as above plus detection confidence
     """
-    assert style in ["SORT_with_conf","SORT","center","bottom_center"], "Invalid style input."
+    assert style in ["SORT_cls","SORT","center","bottom_center"], "Invalid style input."
     
     new_list = []
-    
     if style == "center":
         for item in detections:
             coords = np.zeros([len(item),2])
@@ -59,7 +58,7 @@ def condense_detections(detections,style = "center"):
                 coords[i,3] = (item[i,3]-item[i,1])/float(coords[i,2]) # ratio (width/height)
             new_list.append(coords)
             
-    elif style == "SORT_with_conf":
+    elif style == "SORT_cls":
         for item in detections:
             coords = np.zeros([len(item),5])
             for i in range(0,len(item)):
@@ -67,7 +66,7 @@ def condense_detections(detections,style = "center"):
                 coords[i,1] = (item[i,2]+item[i,4])/2.0 # y centroid
                 coords[i,2] = (item[i,4]-item[i,2]) # scale (y height)
                 coords[i,3] = (item[i,3]-item[i,1])/float(coords[i,2]) # ratio (width/height)
-                coords[i,4] = (item[i,5])
+                coords[i,4] = int(item[i,-1]) #class
             new_list.append(coords)
        
     return new_list
@@ -285,6 +284,7 @@ class KF_Object():
         self.fsld = 0 # frames since last detected
         self.all = [] # all positions of object across frames
         self.tags = []
+        self.cls = -1
         t = 1/30.0
         
         # intialize state (generally x but called state to avoid confusion here)
@@ -333,6 +333,7 @@ class KF_Object():
         
     def predict(self):
         self.kf.predict()
+        self.kf.x = np.nan_to_num(self.kf.x)
     
     def update(self,measurement):
         self.kf.update(measurement)
@@ -366,11 +367,19 @@ def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 60):
 
     active_objs = []
     inactive_objs = []
-    
+    keep_classes = False
+    if len(coords_list[0][0]) == 5:
+        keep_classes = True
+        
     # initialize with all objects found in first frame
     for i,row in enumerate(coords_list[0]):
+        if keep_classes:
+            cls = row[4]
+            row = row[:4]
         obj = KF_Object(row,0,mod_err,meas_err,state_err)
         obj.all.append(obj.get_coords())
+        if keep_classes:
+            obj.cls = cls
         active_objs.append(obj)
 
     # loop through all frames
@@ -396,6 +405,9 @@ def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 60):
         # 3. match - these arrays are both N x 4 but last two columns will be ignored 
         # remove matches with IOU below threshold (i.e. too far apart)
         second = coords_list[frame_num]
+        if keep_classes:
+            classes = second[:,4]
+            second = second[:,:4]
         matches = match_hungarian(locations,second)        
         #matches = match_greedy(locations,second)
         
@@ -426,6 +438,8 @@ def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 60):
             if j not in matches:
                 new_obj = KF_Object(second[j],frame_num,mod_err,meas_err,state_err)
                 new_obj.all.append(new_obj.get_coords())
+                if keep_classes:
+                    new_obj.cls = classes[j]
                 new_obj.tags.append(1) # indicates object detected in this frame
                 active_objs.append(new_obj)
 

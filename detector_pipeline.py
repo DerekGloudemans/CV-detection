@@ -2,6 +2,7 @@ from __future__ import division
 import torch
 import numpy as np
 import cv2 
+import _pickle as pickle
 
 # import detector
 from pytorch_yolo_v3.yolo_detector import Darknet_Detector
@@ -20,7 +21,7 @@ if __name__ == "__main__":
     
     # name in files
     video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
-    video_file = '/media/worklab/data_HDD/cv_data/video/110_foot_pole_test/Axis_Camera_13/cam_3_capture_000.avi'
+    video_file = '/media/worklab/data_HDD/cv_data/video/110_foot_pole_test/Axis_Camera_16/cam_1_capture_000.avi'
     #video_file = '/media/worklab/external 1/Recordings/Aug_09_2019_11-20-15/Axis_Camera_10/cam_0_capture_008.avi'
     background_file = 'im_coord_matching/vwd.png'
     #video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/axis-ACCC8EB0662C/20190510/08/20190510_084109_D60B_ACCC8EB0662C/20190510_09/20190510_090616_25CE.mkv'
@@ -48,7 +49,7 @@ if __name__ == "__main__":
         print("Model reloaded.")
     
         # tests that net is working correctly
-        if True:
+        if False:
             test ='pytorch_yolo_v3/imgs/person.jpg'
             test ='/media/worklab/data_HDD/cv_data/KITTI/Tracking/Tracks/training/image_02/0000/000000.png'
             out = net.detect(test)
@@ -61,7 +62,7 @@ if __name__ == "__main__":
         if False:
             detections = detect_video(video_file,net,show = True, save_file=detect_file)
         else:
-            directory = "/media/worklab/data_HDD/cv_data/KITTI/Tracking/Tracks/training/image_02/0007"
+            directory = "/media/worklab/data_HDD/cv_data/KITTI/Tracking/Tracks/training/image_02/000{}".format(savenum)
             detections = detect_frames(directory,net, show = True, save_file = detect_file)
         detections = remove_duplicates(detections)
         np.save("pipeline_files/detections{}.npy".format(savenum), detections)
@@ -69,8 +70,11 @@ if __name__ == "__main__":
     # track objects and draw on video
     SORT = True
     if SORT:
-        detections = condense_detections(detections,style = "SORT")
+        detections = condense_detections(detections,style = "SORT_cls")
         objs, point_array = track_SORT(detections,mod_err = 1, meas_err = 10, state_err = 1000, fsld_max = 15)
+        f = open("pipeline_files/objects{}.cpkl".format(savenum),'wb')
+        pickle.dump(objs,f)
+        f.close()
     else:
         detections = condense_detections(detections,style = "center")
         point_array, objs = track_naive(detections)
