@@ -7,8 +7,10 @@ import numpy as np
 import cv2 
 import matplotlib.pyplot as plt
 import random
+import _pickle as pickle
 from filterpy.kalman import KalmanFilter
 from util_draw import draw_track
+import re
 
 def condense_detections(detections,style = "center"):
     """
@@ -465,10 +467,90 @@ def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 60):
                 points_array[i+first_frame,(j*2)+1] = obj.all[i][1]
     
     return objs, points_array
+
+
+
+def atoi(text):
+    return int(text) if text.isdigit() else text
+
+def natural_keys(text):
+    '''
+    alist.sort(key=natural_keys) sorts in human order
+    http://nedbatchelder.com/blog/200712/human_sorting.html
+    (See Toothy's implementation in the comments)
+    '''
+    return [ atoi(c) for c in re.split(r'(\d+)', text) ]
     
+def objs_to_KITTI_text(obj_list,out_file):
+    """
+    Converts a list of KF objects into KITTI output file format
+    obj_list - list of KF objs
+    out_file - string nam of text output file
+    """
+    all_tracked_detections = []
+    for id_num, obj in enumerate(obj_list):
+        # get obj_id, frame, class, xmin, xmax, ymin, ymax
+        cls = obj.cls
+        first_frame = obj.first_frame
+        for i in range(0,len(obj.all)):
+            x = obj.all[i][0]
+            y = obj.all[i][1]
+            s = obj.all[i][2]
+            r = obj.all[i][3]
+            frame = first_frame + i
+            #id_num
+            #cls
+            trunc = "invalid"
+            occluded = "invalid"
+            alpha = "invalid"
+            xmin = x - s*r/2
+            ymin = y - s/2
+            xmax = x + s*r/2
+            ymax = y + s/2
+            X = "invalid"
+            Y = "invalid"
+            Z = "invalid"
+            h = "invalid"
+            w = "invalid"
+            l = "invalid"
+            y_rot = "invalid"
+            score = 1.0
+
+            line_elements = [
+                    frame,
+                    id_num,
+                    cls,
+                    trunc,
+                    occluded,
+                    alpha,
+                    xmin,
+                    ymin,
+                    xmax,
+                    ymax,
+                    h,
+                    w,
+                    l,
+                    X,
+                    Y,
+                    Z,
+                    y_rot,
+                    score                    
+                    ]
+            line = ""
+            for item in line_elements:
+                line = line + str(item) + " "
+            all_tracked_detections.append(line[:-1]) # remove final whitespace
+    
+    all_tracked_detections.sort(key = natural_keys)
+    with open(out_file,'w') as f:
+        for item in all_tracked_detections:
+            print(item,file = f)
 
 if __name__ == "__main__":
-    # Kalman filter validation code
-    detections = np.load("temp_detections.npy",allow_pickle= True)
-    flattened = condense_detections(detections,style = "SORT")
-    objs,point_array = track_SORT(flattened)
+#    # Kalman filter validation code
+#    detections = np.load("pipeline_files/detections8.npy",allow_pickle= True)
+#    flattened = condense_detections(detections,style = "SORT_cls")
+#    objs,point_array = track_SORT(flattened)
+    f = open("pipeline_files/objects3.cpkl",'rb')
+    objs = pickle.load(f)
+    objs_to_KITTI_text(objs,"test.txt")
