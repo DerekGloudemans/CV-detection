@@ -9,7 +9,8 @@ import numpy as np
 import cv2 
 import matplotlib.pyplot as plt
 import random
-
+import os
+from PIL import Image
 
 def detect_video(video_file, detector, verbose = True, show = True, save_file = None):
     """
@@ -80,6 +81,65 @@ def detect_video(video_file, detector, verbose = True, show = True, save_file = 
  
     print("Detection finished")
     return all_detections
+
+
+def detect_frames(directory, detector, verbose = True, show = True, save_file = None):
+    """
+    frame by frame object detection of series of video frames using specified detector
+    object as the detector (must have a detect function)
+    if save_file is specified, writes annotated video to this file
+    returns all_detections - list of Dx8 numpy arrays, one row for each object 
+    """
+    
+    im_list = [os.path.join(directory,item) for item in os.listdir(directory)]
+    im_list.sort()
+    im = Image.open(im_list[0])
+    # opens VideoWriter object for saving video file if necessary
+    if save_file != None:
+        # open video_writer object
+        out = cv2.VideoWriter(save_file,cv2.CAP_FFMPEG,cv2.VideoWriter_fourcc('H','2','6','4'), 30, im.size)
+    
+    #main loop   
+    start = time.time()
+    frames = 0
+    all_detections = []
+    
+    for file in im_list:
+            
+        # detect frame
+        detections,im_out = detector.detect(file, show = False, verbose = False)
+        if True: # convert to numpy array
+            all_detections.append(detections.cpu().numpy())
+        
+        #summary statistics
+        frames += 1
+        print("FPS of the video is {:5.2f}".format( frames / (time.time() - start)))
+        
+        
+         # save frame to file if necessary
+        if save_file != None:
+            out.write(im_out)
+        
+        # output frame if necessary
+        if show:
+#            im = cv2.resize(im_out, (1920, 1080))               
+            cv2.imshow("frame", im_out)
+            key = cv2.waitKey(1)
+            if key & 0xFF == ord('q'):
+                break
+            continue
+            
+    # close all resources used      
+    cv2.destroyAllWindows()
+    try:
+        out.release()
+    except:
+        pass
+    torch.cuda.empty_cache()
+ 
+    print("Detection finished")
+    return all_detections
+
 
 def remove_duplicates(detections):
     """

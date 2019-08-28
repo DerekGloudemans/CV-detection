@@ -409,9 +409,10 @@ def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 60):
                 obj.fsld += 1
                 obj.all.append(obj.get_coords())
                 obj.tags.append(0) # indicates object not detected in this frame
-                if obj.fsld > fsld_max:
+                if obj.fsld > fsld_max or (obj.fsld > 0 and len(obj.all)< 3):
                     move_to_inactive.append(i)
-            
+                    
+                
             else: # object was matched        
                 # update Kalman filter
                 measure_coords = second[matches[i]]
@@ -443,10 +444,11 @@ def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 60):
     points_array = np.zeros([len(coords_list),len(objs)*2])-1
     for j in range(0,len(objs)):
         obj = objs[j]
-        first_frame = int(obj.first_frame)
-        for i in range(0,len(obj.all)):
-            points_array[i+first_frame,j*2] = obj.all[i][0]
-            points_array[i+first_frame,(j*2)+1] = obj.all[i][1]
+        if len(obj.all) > 3: # only keep object that were found in first 3 frames
+            first_frame = int(obj.first_frame)
+            for i in range(0,len(obj.all)):
+                points_array[i+first_frame,j*2] = obj.all[i][0]
+                points_array[i+first_frame,(j*2)+1] = obj.all[i][1]
     
     return objs, points_array
     

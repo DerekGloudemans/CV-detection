@@ -49,6 +49,11 @@ def get_objs_matches_splitnet(splitnet,locations,frame,nms_threshold = 0.3 ,conf
     matches - length n list of matches where val at index i indicates which object in frame 
               corresponds to object i in previous frame
     """
+    
+    cur_time = time.time()
+
+    
+    
     # populate second with detections from splitnet
     second = np.zeros([len(active_objs),4])
     windows = np.zeros([len(active_objs),4])
@@ -72,13 +77,19 @@ def get_objs_matches_splitnet(splitnet,locations,frame,nms_threshold = 0.3 ,conf
         windows[i,2] = int(x + s*r/2)
         windows[i,1] = int(y - s/2)
         windows[i,3] = int(y + s/2)
-        
+    
+    time_windows = time.time() - cur_time
+    cur_time = time.time()
+    
     # 2b. plot windows on the original image to check
     if False:
         plot_windows(frame.copy(),windows)
     
     #2c. crop these into tensors, scale and normalize, etc.
     pil_im = Image.fromarray(cv2.cvtColor(frame,cv2.COLOR_BGR2RGB))
+    
+    time_loadim = time.time() - cur_time
+    cur_time = time.time()
 
     # define transforms
     transform = transforms.Compose([\
@@ -86,7 +97,7 @@ def get_objs_matches_splitnet(splitnet,locations,frame,nms_threshold = 0.3 ,conf
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
-
+    
     ims = []
     for i,window in enumerate(windows):
         # crop
@@ -117,7 +128,10 @@ def get_objs_matches_splitnet(splitnet,locations,frame,nms_threshold = 0.3 ,conf
         transform_params[i,2] = pad_im.size[0]
         im = transform(pad_im)
         ims.append(im)
-       
+    
+    time_crop_transform = time.time() - cur_time
+    cur_time = time.time()
+    
     # convert all images to a single tensor     
     ims = torch.stack(ims)
     ims = ims.to(device)
@@ -149,7 +163,10 @@ def get_objs_matches_splitnet(splitnet,locations,frame,nms_threshold = 0.3 ,conf
         bboxes = np.concatenate(bboxes)
         preds = np.concatenate(preds)
 
-    # TODO - 2f. parse back into global image 
+    time_net = time.time() - cur_time
+    cur_time = time.time()
+    
+    # 2f. parse back into global image 
     new_windows = np.zeros([len(windows),4])
     for i in range(0,len(bboxes)):
 
@@ -173,7 +190,10 @@ def get_objs_matches_splitnet(splitnet,locations,frame,nms_threshold = 0.3 ,conf
         second[i,3] = (bbox[2] - bbox[0])/(second[i,2]+.001) #r
         
     torch.cuda.empty_cache()
-        
+    
+    time_convert = time.time() - cur_time
+    cur_time = time.time()
+    
     # non-maximal supression - not necessary for yolo because yolo already does this
     for i in range(0,len(second)):
         for j in range(i+1, len(second)):
@@ -204,6 +224,9 @@ def get_objs_matches_splitnet(splitnet,locations,frame,nms_threshold = 0.3 ,conf
                     preds[i,1] = 0
                     preds[i,0] = 1
                     
+    time_nms = time.time() - cur_time
+    cur_time = time.time()
+               
     # remove all detections with confidence below threshold
     keep = []
     for i in range(0,len(second)):
@@ -218,38 +241,63 @@ def get_objs_matches_splitnet(splitnet,locations,frame,nms_threshold = 0.3 ,conf
         else:
             matches[i] = -1
             removals += 1
-                    # plot output bboxes on original image to verify correctness
+    
+    time_prune = time.time() - cur_time
+    cur_time = time.time()        
+            
+    # plot output bboxes on original image to verify correctness
     if True:
         # show = not(show) prevents window from being plotted twice if it will
         # already be shown later in pipeline
         plot_windows(frame,new_windows[keep,:],show = not(show))    
     
+    time_plot = time.time() - cur_time
+    cur_time = time.time()
+    
+    # time usage statistics
+    if True:
+        all_time = time_plot + time_prune + time_nms + time_convert + time_net + time_crop_transform + time_loadim + time_windows
+        print("\n _______________________________")
+        print("Window time: {}%".format(time_windows/all_time*100))
+        print("Im load time: {}%".format(time_loadim/all_time*100))
+        print("Crop transform time: {}%".format(time_crop_transform/all_time*100))
+        print("Network time: {}%".format(time_net/all_time*100))
+        print("Coord conversion time: {}%".format(time_convert/all_time*100))
+        print("NMS time: {}%".format(time_nms/all_time*100))
+        print("Prune time: {}%".format(time_prune/all_time*100))
+        print("Plot time: {}%".format(time_plot/all_time*100))
+        print("Number of objects: {}".format(len(locations)))
     return matches, second
 
+##############################################################################
+##############################################################################
+##############################################################################
     
 if __name__ == "__main__":
     
     # set up a bunch of parameters
-    savenum = 0 # assign unique num to avoid overwriting as necessary
+    savenum = 2 # assign unique num to avoid overwriting as necessary
     show = True
     global wer # window expansion ratio, also used in parallel_regression_classification.py
     wer = 5 
     
     # Kalman Filter variables
-    mod_err = 1
+    mod_err = 100
     meas_err = 3
-    state_err = 1
+    state_err = 100
     
     # tracking parameters
-    yolo_frequency = 15 # frames between yolo frames + 1
-    fsld_max = 30 # max # of frames an object can go undetected before it is removed
-    conf_threshold = 0.4 # all detections with lower confidence are removed
-    window_expand = 0.25 # window expansion from current state estimate at each frame
+    yolo_frequency = 10 # frames between yolo frames + 1
+    fsld_max = 5 # max # of frames an object can go undetected before it is removed
+    conf_threshold = 0.5 # all detections with lower confidence are removed
+    window_expand = 0 # window expansion from current state estimate at each frame
     min_matching_overlap = 0.1 # lower overlap will result in two detections not being matched
     nms_threshold = 0.5 # higher iou will result in lower confidence splitnet detection being supressed
    
     # relevant file paths
-    video_file = '/media/worklab/data_HDD/cv_data/video/traffic_assorted/traffic_0.avi'
+    #video_file = '/media/worklab/data_HDD/cv_data/video/traffic_assorted/traffic_2.avi'
+    video_file = '/media/worklab/data_HDD/cv_data/video/110_foot_pole_test/Axis_Camera_16/cam_1_capture_000.avi'
+
     intermediate_file = 'pipeline_files/inter_{}.avi'.format(savenum)
     save_file = 'pipeline_files/track_{}.avi'.format(savenum)
     splitnet_checkpoint = "/home/worklab/Documents/Checkpoints/splitnet_centered5_checkpoint_13.pt"
@@ -328,6 +376,11 @@ if __name__ == "__main__":
         frame_height = int(cap.get(4))
         out = cv2.VideoWriter(intermediate_file,cv2.CAP_FFMPEG,cv2.VideoWriter_fourcc('H','2','6','4'), 30, (frame_width,frame_height))
     
+    
+    # time summary variables
+    cur_time = time.time()
+
+    
     ################ main loop    
     while cap.isOpened():
         
@@ -336,6 +389,9 @@ if __name__ == "__main__":
             for obj in active_objs:
                 obj.predict()
                 
+            time_predict = time.time() - cur_time
+            cur_time = time.time()
+            
             ## 2. get new objects using either yolo or splitnet, depending on frame
             # in either case, locations holds states of current frame and second
             # holds states of next frame
@@ -356,8 +412,10 @@ if __name__ == "__main__":
             # use splitnet
             else:
                 matches, second = get_objs_matches_splitnet(splitnet,locations,frame,nms_threshold,conf_threshold,show = show)
-
-                
+            
+            time_detect = time.time() - cur_time
+            cur_time = time.time()
+            
             ## 3. traverse object list
             move_to_inactive = []
             for i in range(0,len(active_objs)):
@@ -393,10 +451,19 @@ if __name__ == "__main__":
             for idx in move_to_inactive:
                 inactive_objs.append(active_objs[idx])
                 del active_objs[idx]
+           
+            time_track = time.time() - cur_time
+            cur_time = time.time()
             
             # summary statistics
             frame_num += 1
             print("FPS of the video is {:5.2f}".format( 1.0 / (time.time() - start)))
+            
+#            time_all = time_predict + time_detect + time_track
+#            a = time_predict / time_all
+#            b = time_detect / time_all
+#            c = time_track / time_all
+#            print("Predict: {}, Detect: {}, Track: {}".format(a,b,c))
             start = time.time()
             
             out_im = frame.copy()

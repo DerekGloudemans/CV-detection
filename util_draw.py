@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import random
 
 
-def draw_track(point_array, file_in, file_out = None, show = False, trail_size = 100): 
+def draw_track(point_array, file_in, file_out = None, show = False, trail_size = 15): 
     """
     Plots point_array on the video_file used to create it
     """
@@ -44,12 +44,12 @@ def draw_track(point_array, file_in, file_out = None, show = False, trail_size =
             for i in range(0, int(len(point_array[0])/2)):
                 try:
                     center = (int(point_array[frame_num,i*2]),int(point_array[frame_num,(i*2)+1]))
-                    cv2.circle(frame,center, 10, colormaps[i], thickness = -1)
+                    cv2.circle(frame,center, 5, colormaps[i], thickness = -1)
                     
                     for j in range(1,trail_size+1):
                         if frame_num - j >= 0:
                             center = (int(point_array[frame_num-j,i*2]),int(point_array[frame_num-j,(i*2)+1]))
-                            cv2.circle(frame,center, int(10*0.99**j), colormaps[i], thickness = -1)
+                            cv2.circle(frame,center, int(5*0.99**j), colormaps[i], thickness = -1)
                 except:
                     pass # last frame is perhaps not done correctly
             im_out = frame #write here
@@ -67,7 +67,10 @@ def draw_track(point_array, file_in, file_out = None, show = False, trail_size =
             
             # output frame
             if show:
-                im = cv2.resize(im_out, (1920, 1080))               
+                if frame_width > 1920:
+                    im = cv2.resize(im_out, (int(frame_width/2), int(frame_height/2)))
+                else:
+                    im = im_out
                 cv2.imshow("frame", im)
                 key = cv2.waitKey(1)
                 if key & 0xFF == ord('q'):

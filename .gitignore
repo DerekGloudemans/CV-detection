@@ -6,3 +6,5 @@ test\.png
 *.npy
 
 *.mkv
+
+*.pyc

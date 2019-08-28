@@ -7,7 +7,7 @@ import cv2
 from pytorch_yolo_v3.yolo_detector import Darknet_Detector
 
 # import utility functions
-from util_detect import detect_video, remove_duplicates
+from util_detect import detect_video, remove_duplicates, detect_frames
 from util_track import track_naive,track_SORT,condense_detections
 from util_transform import get_best_transform, transform_pt_array, velocities_from_pts, plot_velocities
 from util_draw import draw_world, draw_track, draw_track_world
@@ -15,11 +15,13 @@ from util_draw import draw_world, draw_track, draw_track_world
 
 if __name__ == "__main__":
     
-    savenum = 14 # assign unique num to avoid overwriting as necessary
+    savenum = 8 # assign unique num to avoid overwriting as necessary
     show = True
     
     # name in files
     video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/05-10-2019_05-32-15 do not delete/Pelco_Camera_1/capture_008.avi'
+    video_file = '/media/worklab/data_HDD/cv_data/video/110_foot_pole_test/Axis_Camera_13/cam_3_capture_000.avi'
+    #video_file = '/media/worklab/external 1/Recordings/Aug_09_2019_11-20-15/Axis_Camera_10/cam_0_capture_008.avi'
     background_file = 'im_coord_matching/vwd.png'
     #video_file = '/home/worklab/Desktop/I24 - test pole visit 5-10-2019/axis-ACCC8EB0662C/20190510/08/20190510_084109_D60B_ACCC8EB0662C/20190510_09/20190510_090616_25CE.mkv'
     
@@ -46,8 +48,9 @@ if __name__ == "__main__":
         print("Model reloaded.")
     
         # tests that net is working correctly
-        if False:
+        if True:
             test ='pytorch_yolo_v3/imgs/person.jpg'
+            test ='/media/worklab/data_HDD/cv_data/KITTI/Tracking/Tracks/training/image_02/0000/000000.png'
             out = net.detect(test)
             torch.cuda.empty_cache()    
       
@@ -55,7 +58,11 @@ if __name__ == "__main__":
     try:
         detections = np.load("pipeline_files/detections{}.npy".format(savenum),allow_pickle= True)
     except:
-        detections = detect_video(video_file,net,show = True, save_file=detect_file)
+        if False:
+            detections = detect_video(video_file,net,show = True, save_file=detect_file)
+        else:
+            directory = "/media/worklab/data_HDD/cv_data/KITTI/Tracking/Tracks/training/image_02/0007"
+            detections = detect_frames(directory,net, show = True, save_file = detect_file)
         detections = remove_duplicates(detections)
         np.save("pipeline_files/detections{}.npy".format(savenum), detections)
 
@@ -63,14 +70,14 @@ if __name__ == "__main__":
     SORT = True
     if SORT:
         detections = condense_detections(detections,style = "SORT")
-        objs, point_array = track_SORT(detections,mod_err = 1, meas_err = 10, state_err = 1000, fsld_max = 60)
+        objs, point_array = track_SORT(detections,mod_err = 1, meas_err = 10, state_err = 1000, fsld_max = 15)
     else:
         detections = condense_detections(detections,style = "center")
         point_array, objs = track_naive(detections)
 
             
 
-    draw_track(point_array,detect_file,track_file,show)
+    draw_track(point_array,detect_file,track_file,show, trail_size = 5)
     
     # get transform for camera to world space and transform object points
     cam_pts = np.load('im_coord_matching/cam_points2.npy')
