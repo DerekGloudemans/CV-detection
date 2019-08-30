@@ -491,6 +491,22 @@ def objs_to_KITTI_text(obj_list,out_file):
     for id_num, obj in enumerate(obj_list):
         # get obj_id, frame, class, xmin, xmax, ymin, ymax
         cls = obj.cls
+        #convert class num into text label
+        if cls == 0:
+            cls = "pedestrian"
+        elif cls == 7:
+            cls = "truck"
+        elif cls == 2:
+            cls = "car"
+        elif cls == 6:
+            cls = "tram"
+        elif cls == 5:
+            cls = "bus"
+        elif cls == 3:
+            cls = "motorcycle"
+        else:
+            cls = "dontcare"
+        
         first_frame = obj.first_frame
         for i in range(0,len(obj.all)):
             x = obj.all[i][0]
