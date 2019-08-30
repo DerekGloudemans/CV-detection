@@ -67,5 +67,11 @@ if __name__ == "__main__":
             
             # track objects and draw on video
             objs, point_array = track_SORT(detections,mod_err = 1, meas_err = 10, state_err = 1000, fsld_max = 15)
+            
+            # pickle objs so text files can be regenerated quickly
+            f = open(os.path.join(out_directory,"objs{}".format(i)),'wb')
+            pickle.dump(objs,f)
+            f.close()
+            
             objs_to_KITTI_text(objs,out_path)
         

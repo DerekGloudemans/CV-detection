@@ -487,6 +487,7 @@ def objs_to_KITTI_text(obj_list,out_file):
     obj_list - list of KF objs
     out_file - string nam of text output file
     """
+    dummy = -1# dummy val for items not predicted
     all_tracked_detections = []
     for id_num, obj in enumerate(obj_list):
         # get obj_id, frame, class, xmin, xmax, ymin, ymax
@@ -516,20 +517,20 @@ def objs_to_KITTI_text(obj_list,out_file):
             frame = first_frame + i
             #id_num
             #cls
-            trunc = "invalid"
-            occluded = "invalid"
-            alpha = "invalid"
+            trunc = dummy
+            occluded = dummy
+            alpha = dummy
             xmin = x - s*r/2
             ymin = y - s/2
             xmax = x + s*r/2
             ymax = y + s/2
-            X = "invalid"
-            Y = "invalid"
-            Z = "invalid"
-            h = "invalid"
-            w = "invalid"
-            l = "invalid"
-            y_rot = "invalid"
+            X = dummy
+            Y = dummy
+            Z = dummy
+            h = dummy
+            w = dummy
+            l = dummy
+            y_rot = dummy
             score = 1.0
 
             line_elements = [
