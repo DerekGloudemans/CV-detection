@@ -9,14 +9,14 @@ from pytorch_yolo_v3.yolo_detector import Darknet_Detector
 
 # import utility functions
 from util_detect import detect_video, remove_duplicates, detect_frames
-from util_track import track_naive,track_SORT,condense_detections
+from util_track import track_naive,condense_detections,track_SORT
 from util_transform import get_best_transform, transform_pt_array, velocities_from_pts, plot_velocities
 from util_draw import draw_world, draw_track, draw_track_world
 
 
 if __name__ == "__main__":
     
-    savenum = 3 # assign unique num to avoid overwriting as necessary
+    savenum = 13 # assign unique num to avoid overwriting as necessary
     show = True
     
     # name in files
@@ -62,7 +62,7 @@ if __name__ == "__main__":
         if False:
             detections = detect_video(video_file,net,show = True, save_file=detect_file)
         else:
-            directory = "/media/worklab/data_HDD/cv_data/KITTI/Tracking/Tracks/training/image_02/000{}".format(savenum)
+            directory = "/media/worklab/data_HDD/cv_data/KITTI/Tracking/Tracks/training/image_02/{0:04d}".format(savenum)
             detections = detect_frames(directory,net, show = True, save_file = detect_file)
         detections = remove_duplicates(detections)
         np.save("pipeline_files/detections{}.npy".format(savenum), detections)
