@@ -43,8 +43,8 @@ if __name__ == "__main__":
     show = True
     
     # name in files
-    KITTI_directory = '/media/worklab/data_HDD/cv_data/KITTI/Tracking/Tracks/training/image_02'
-    out_directory = '/media/worklab/data_HDD/cv_data/KITTI/Tracking/temp_outs'
+    KITTI_directory = '/media/worklab/data_HDD/cv_data/UA_Detrac/DETRAC-train-data/Insight-MVT_Annotation_Train'
+    out_directory = '/media/worklab/data_HDD/temp'
 
     net = load_yolo()
 

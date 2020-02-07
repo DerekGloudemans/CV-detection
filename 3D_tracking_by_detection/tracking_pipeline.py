@@ -167,7 +167,6 @@ if __name__ == "__main__":
         # plot first frame
         if frame_loader.cur_frame == 0:
             plot_batch(regress_net,obj_crops)
-            time.sleep(5)
         
         all_3d.append(out.data.cpu().numpy())
         

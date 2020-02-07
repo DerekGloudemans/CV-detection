@@ -16,7 +16,7 @@ from util_draw import draw_world, draw_track, draw_track_world
 
 if __name__ == "__main__":
     
-    savenum = 13 # assign unique num to avoid overwriting as necessary
+    savenum = 0 # assign unique num to avoid overwriting as necessary
     show = True
     
     # name in files
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     try:
         detections = np.load("pipeline_files/detections{}.npy".format(savenum),allow_pickle= True)
     except:
-        if False:
+        if True:
             detections = detect_video(video_file,net,show = True, save_file=detect_file)
         else:
             directory = "/media/worklab/data_HDD/cv_data/KITTI/Tracking/Tracks/training/image_02/{0:04d}".format(savenum)
@@ -71,7 +71,7 @@ if __name__ == "__main__":
     SORT = True
     if SORT:
         detections = condense_detections(detections,style = "SORT_cls")
-        objs, point_array = track_SORT(detections,mod_err = 1, meas_err = 10, state_err = 1000, fsld_max = 15)
+        objs, point_array = track_SORT(detections,mod_err = 1, meas_err = 10, state_err = 1000, fsld_max = 25)
         f = open("pipeline_files/objects{}.cpkl".format(savenum),'wb')
         pickle.dump(objs,f)
         f.close()
@@ -81,7 +81,7 @@ if __name__ == "__main__":
 
             
 
-    draw_track(point_array,detect_file,track_file,show, trail_size = 5)
+    draw_track(point_array,detect_file,track_file,show, trail_size = 75)
     
     # get transform for camera to world space and transform object points
     cam_pts = np.load('im_coord_matching/cam_points2.npy')

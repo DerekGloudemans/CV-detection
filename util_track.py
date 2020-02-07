@@ -410,7 +410,7 @@ def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 60):
         if keep_classes:
             classes = second[:,4]
             second = second[:,:4]
-        matches = match_hungarian(locations,second)        
+        matches = match_hungarian(locations,second,iou_cutoff = 0.2)        
         #matches = match_greedy(locations,second)
         
         # traverse object list
@@ -460,7 +460,7 @@ def track_SORT(coords_list,mod_err=1,meas_err=1,state_err=100,fsld_max = 60):
     points_array = np.zeros([len(coords_list),len(objs)*2])-1
     for j in range(0,len(objs)):
         obj = objs[j]
-        if len(obj.all) > 3: # only keep object that were found in first 3 frames
+        if len(obj.all) > 6: # only keep object that were found in first 3 frames
             first_frame = int(obj.first_frame)
             for i in range(0,len(obj.all)):
                 points_array[i+first_frame,j*2] = obj.all[i][0]
