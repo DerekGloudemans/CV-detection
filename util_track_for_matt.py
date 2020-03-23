@@ -118,7 +118,7 @@ class KF_Tracker():
         Upates tracked object states, creating and destroying KF_objects as 
         necessary
         detections - [n x 2] Numpy array of xy coordinates for all detected objects 
-        returns - [o x 2] Numpy array of xy coordinates for all tracked objects
+        returns - dictionary of xy coords (1x2 numpy) keyed by object ids 
         """
         
         # 1. predict new locations of all objects x_k | x_k-1
@@ -199,7 +199,7 @@ if __name__ == "__main__":
     tracked_objects = tracker(detections)
     colors = np.random.rand(1000,3)
 
-    for i in range(0,50):
+    for i in range(0,500):
         # plot the points to visually confirm that it seems to be working 
         x_coords = []
         y_coords = []
